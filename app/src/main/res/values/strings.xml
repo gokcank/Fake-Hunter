@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fake Hunter</string>
+    <string name="app_subtitle">Hardware Authenticity Toolkit</string>
+    <string name="btn_inspect">Inspect Hardware</string>
+    <string name="btn_reinspect">Re-inspect</string>
+    <string name="btn_copy_report">Copy Report</string>
+    <string name="copied_to_clipboard">Report copied to clipboard</string>
+    
+    <!-- Status -->
+    <string name="status_clean">VERIFIED</string>
+    <string name="status_suspicious">SUSPICIOUS</string>
+    <string name="status_fake">FAKE HARDWARE DETECTED</string>
+    
+    <!-- Card Headers -->
+    <string name="header_system">System Identity</string>
+    <string name="header_memory">Memory (RAM &amp; Swap)</string>
+    <string name="header_cpu">Processor (CPU Cores)</string>
+    <string name="header_storage">Storage (User ROM)</string>
+    
+    <!-- Metrics -->
+    <string name="metric_model">Model: %1$s</string>
+    <string name="metric_platform">Chipset / Board: %1$s</string>
+    <string name="metric_android">Android %1$s (API %2$d)</string>
+    <string name="metric_ram_physical">Physical RAM: %1$s</string>
+    <string name="metric_ram_swap">Swap / ZRAM: %1$s</string>
+    <string name="metric_cores">Cores: %1$d reported / %2$d active</string>
+    <string name="metric_storage">Total /data: %1$s (Free: %2$s)</string>
+    
+    <!-- Warnings -->
+    <string name="warn_swap_inflated">RAM inflated with Swap space!</string>
+    <string name="warn_cores_fake">Reported cores are dormant/fake!</string>
+    <string name="warn_android_spoofed">Android version is spoofed!</string>
+    <string name="warn_known_fake">Known fake chipset signature identified!</string>
+</resources>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fake Hunter</string>
+    <string name="app_subtitle">Donanım Doğrulama Araç Seti</string>
+    <string name="btn_inspect">Donanımı Teftiş Et</string>
+    <string name="btn_reinspect">Tekrar Teftiş Et</string>
+    <string name="btn_copy_report">Raporu Kopyala</string>
+    <string name="copied_to_clipboard">Rapor panoya kopyalandı</string>
+    
+    <!-- Durum -->
+    <string name="status_clean">DOĞRULANDI</string>
+    <string name="status_suspicious">ŞÜPHELİ</string>
+    <string name="status_fake">SAHTE DONANIM TESPİT EDİLDİ</string>
+    
+    <!-- Başlıklar -->
+    <string name="header_system">Sistem Kimliği</string>
+    <string name="header_memory">Bellek (RAM ve Takas)</string>
+    <string name="header_cpu">İşlemci (Çekirdekler)</string>
+    <string name="header_storage">Depolama (Kullanıcı ROM)</string>
+    
+    <!-- Metrikler -->
+    <string name="metric_model">Model: %1$s</string>
+    <string name="metric_platform">Yonga Seti / Anakart: %1$s</string>
+    <string name="metric_android">Android %1$s (API %2$d)</string>
+    <string name="metric_ram_physical">Fiziksel RAM: %1$s</string>
+    <string name="metric_ram_swap">Takas / ZRAM: %1$s</string>
+    <string name="metric_cores">Çekirdek: %1$d bildirilen / %2$d aktif</string>
+    <string name="metric_storage">Toplam /data: %1$s (Boş: %2$s)</string>
+    
+    <!-- Uyarılar -->
+    <string name="warn_swap_inflated">Fiziksel RAM takas alanıyla şişirilmiş!</string>
+    <string name="warn_cores_fake">Bildirilen bazı çekirdekler frekans üretmiyor!</string>
+    <string name="warn_android_spoofed">Görünen Android sürümü sahte!</string>
+    <string name="warn_known_fake">Bilinen sahte yonga seti kimliği tespit edildi!</string>
+</resources>

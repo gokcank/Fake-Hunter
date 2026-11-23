@@ -283,6 +283,19 @@ for idx in $(seq 0 $((REPORTED_CORES - 1))); do
         MAX_FREQ=$(cat "${CORE_DIR}/cpufreq/cpuinfo_max_freq" 2>/dev/null || echo 0)
     fi
 
+    # Fallback to /proc/cpuinfo if cpufreq nodes do not exist (e.g. x86 architecture / virtualization)
+    if [ "$CUR_FREQ" -eq 0 ] && [ -f /proc/cpuinfo ]; then
+        CPUINFO_MHZ=$(awk -v core="$idx" '
+            $1 == "processor" && $3 == core { in_core=1 }
+            in_core && ($1 == "cpu" && $2 == "MHz") { print int($4); exit }
+            in_core && $1 == "processor" && $3 != core { exit }
+        ' /proc/cpuinfo)
+        if [ -n "$CPUINFO_MHZ" ] && [ "$CPUINFO_MHZ" -gt 0 ] 2>/dev/null; then
+            CUR_FREQ=$((CPUINFO_MHZ * 1000))
+            [ "$MAX_FREQ" -eq 0 ] && MAX_FREQ="$CUR_FREQ"
+        fi
+    fi
+
     if [ "$IS_ONLINE" -eq 1 ] && [ "$CUR_FREQ" -gt 0 ]; then
         ACTIVE_CORES=$((ACTIVE_CORES + 1))
         CORE_DETAILS="${CORE_DETAILS}    Core ${idx}: ${COLOR_GREEN}ONLINE${COLOR_RESET} ($((CUR_FREQ / 1000)) MHz / max: $((MAX_FREQ / 1000)) MHz)\n"

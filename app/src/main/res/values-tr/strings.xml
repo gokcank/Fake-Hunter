@@ -32,4 +32,16 @@
     <string name="warn_cores_fake">Bildirilen bazı çekirdekler frekans üretmiyor!</string>
     <string name="warn_android_spoofed">Görünen Android sürümü sahte!</string>
     <string name="warn_known_fake">Bilinen sahte yonga seti kimliği tespit edildi!</string>
+
+    <!-- Hakkında Penceresi -->
+    <string name="btn_about">Hakkında</string>
+    <string name="about_title">Fake Hunter</string>
+    <string name="about_subtitle">Donanım Doğrulama ve Sahtecilik Tespit Araç Seti</string>
+    <string name="about_version">Sürüm %1$s</string>
+    <string name="about_description">Fake Hunter, Android multimedya sistemleri (Head Unit), TV kutuları ve mobil cihazlarda sahte donanım modifikasyonlarını (şişirilmiş RAM/SWAP, sahte çekirdek, sahte Android sürümü) ifşa eden açık kaynaklı bir araç setidir.</string>
+    <string name="about_privacy_title">Gizlilik ve Güvenlik</string>
+    <string name="about_privacy_desc">• Sıfır internet izni (%100 çevrimdışı)\n• Hiçbir veri toplamaz veya aktarmaz\n• Çökme korumalı savunmacı mimari</string>
+    <string name="about_license_text">Açık kaynak yazılım (MIT Lisansı).</string>
+    <string name="about_github_url">https://github.com/gokcank/Fake-Hunter</string>
+    <string name="btn_close">Kapat</string>
 </resources>

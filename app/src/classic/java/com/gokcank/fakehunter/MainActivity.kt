@@ -38,6 +38,10 @@ class MainActivity : AppCompatActivity() {
             copyReport()
         }
 
+        binding.btnAbout.setOnClickListener {
+            showAboutDialog()
+        }
+
         runInspection(wake = false)
     }
 
@@ -150,5 +154,25 @@ class MainActivity : AppCompatActivity() {
         val clip = ClipData.newPlainText("FakeHunter Report", report.toFormattedPlainText())
         clipboard.setPrimaryClip(clip)
         Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showAboutDialog() {
+        val message = StringBuilder().apply {
+            appendLine(getString(R.string.about_version, "1.0.0"))
+            appendLine()
+            appendLine(getString(R.string.about_description))
+            appendLine()
+            appendLine(getString(R.string.about_privacy_title))
+            appendLine(getString(R.string.about_privacy_desc))
+            appendLine()
+            appendLine(getString(R.string.about_license_text))
+            appendLine(getString(R.string.about_github_url))
+        }.toString()
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.about_title))
+            .setMessage(message)
+            .setPositiveButton(getString(R.string.btn_close), null)
+            .show()
     }
 }

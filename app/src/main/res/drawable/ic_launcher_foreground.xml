@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer Shield with Neon Cyan Glow -->
+    <path
+        android:fillColor="#1A2633"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round"
+        android:pathData="M54,24 L78,33 C78,60 54,78 54,84 C54,78 30,60 30,33 Z" />
+
+    <!-- Inner CPU Chip Die -->
+    <path
+        android:fillColor="#0D1924"
+        android:strokeColor="#00E676"
+        android:strokeWidth="1.5"
+        android:pathData="M44,43 h20 v20 h-20 Z" />
+
+    <!-- Chip Pins / Traces -->
+    <path
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="1.5"
+        android:pathData="M48,39 v4 M54,37 v6 M60,39 v4 M48,63 v4 M54,63 v6 M60,63 v4 M39,48 h4 M37,54 h6 M39,60 h4 M63,48 h4 M63,54 h6 M63,60 h4" />
+
+    <!-- Magnifying Glass / Scanner Lens -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M53,51 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+    <path
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M58,56 L66,64" />
+
+    <!-- Checkmark inside scanner -->
+    <path
+        android:strokeColor="#00E676"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M49,51 L52,54 L57,48" />
+</vector>

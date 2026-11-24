@@ -88,6 +88,7 @@ fun ModernDashboard(
     onCopy: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+    var showAboutDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -132,7 +133,73 @@ fun ModernDashboard(
                 OutlinedButton(onClick = onCopy) {
                     Text(text = stringResource(R.string.btn_copy_report), color = Color.White)
                 }
+
+                OutlinedButton(onClick = { showAboutDialog = true }) {
+                    Text(text = stringResource(R.string.btn_about), color = Color.White)
+                }
             }
+        }
+
+        if (showAboutDialog) {
+            AlertDialog(
+                onDismissRequest = { showAboutDialog = false },
+                title = {
+                    Text(
+                        text = stringResource(R.string.about_title),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = stringResource(R.string.about_version, "1.0.0"),
+                            color = Color(0xFF00E5FF),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = stringResource(R.string.about_description),
+                            color = Color(0xFFCFD8DC),
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.about_privacy_title),
+                            color = Color(0xFF00E676),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = stringResource(R.string.about_privacy_desc),
+                            color = Color(0xFF90A4AE),
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.about_license_text),
+                            color = Color(0xFFCFD8DC),
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = stringResource(R.string.about_github_url),
+                            color = Color(0xFF00E5FF),
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showAboutDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
+                    ) {
+                        Text(stringResource(R.string.btn_close), color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = Color(0xFF1C2026),
+                shape = RoundedCornerShape(16.dp)
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))

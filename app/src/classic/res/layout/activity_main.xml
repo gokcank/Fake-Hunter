@@ -61,6 +61,16 @@
                 android:text="@string/btn_copy_report"
                 android:textColor="@color/white"
                 app:strokeColor="@color/card_stroke" />
+
+            <Button
+                android:id="@+id/btnAbout"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_about"
+                android:textColor="@color/white"
+                app:strokeColor="@color/card_stroke" />
         </LinearLayout>
 
         <!-- Verdict Banner -->

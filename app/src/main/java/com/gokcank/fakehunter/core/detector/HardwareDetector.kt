@@ -5,18 +5,20 @@ import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import com.gokcank.fakehunter.core.model.*
+import com.gokcank.fakehunter.core.root.RootHelper
 import com.gokcank.fakehunter.core.safeRun
 import java.io.File
 
 object HardwareDetector {
 
-    fun performAudit(context: Context, wakeTest: Boolean = false): AuditReport {
+    fun performAudit(context: Context, wakeTest: Boolean = false, requestRoot: Boolean = false): AuditReport {
         val issues = mutableListOf<AuditIssue>()
 
         val systemInfo = detectSystemInfo()
         val ramInfo = detectRamInfo(issues)
         val cpuInfo = detectCpuInfo(issues, wakeTest)
         val storageInfo = detectStorageInfo(issues)
+        val rootInfo = RootHelper.inspectRoot(requestRootElevation = requestRoot)
 
         checkKnownFraudSignatures(systemInfo, issues)
         checkAndroidVersionSpoofing(systemInfo, issues)
@@ -32,6 +34,7 @@ object HardwareDetector {
             ram = ramInfo,
             cpu = cpuInfo,
             storage = storageInfo,
+            root = rootInfo,
             verdict = verdict,
             issues = issues
         )

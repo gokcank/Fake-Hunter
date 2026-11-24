@@ -33,6 +33,21 @@
     <string name="warn_android_spoofed">Android version is spoofed!</string>
     <string name="warn_known_fake">Known fake chipset signature identified!</string>
 
+    <!-- Root & Security -->
+    <string name="header_root">Root &amp; Kernel Security</string>
+    <string name="root_status_granted">Root: GRANTED (UID 0)</string>
+    <string name="root_status_binary_only">Root: Binary found (Not granted)</string>
+    <string name="root_status_none">Root: None (Standard User)</string>
+    <string name="btn_deep_root_audit">Deep Root Audit</string>
+
+    <!-- Storage Verification Test -->
+    <string name="header_storage_test">Physical Storage Verification</string>
+    <string name="storage_test_desc">Writes and reads test blocks to expose fake flash memory.</string>
+    <string name="btn_start_test">Start Test (500 MB)</string>
+    <string name="testing_in_progress">Testing storage...</string>
+    <string name="storage_test_passed">Verification PASSED (%1$.1f MB/s W, %2$.1f MB/s R)</string>
+    <string name="storage_test_failed">CORRUPTION DETECTED!</string>
+
     <!-- About Dialog -->
     <string name="btn_about">About</string>
     <string name="about_title">Fake Hunter</string>

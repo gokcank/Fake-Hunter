@@ -19,13 +19,15 @@ usage() {
     echo "Usage: ./fake_hunter_adb.sh [options]"
     echo ""
     echo "Options:"
-    echo "  -s <serial>        Target specific device serial / IP"
-    echo "  --lang <tr|en>     Force language (Turkish or English)"
-    echo "  --wake             Run CPU core wake-up test on device"
-    echo "  --save <file>      Save terminal report to host file"
-    echo "  --json <file>      Export JSON report to host file"
-    echo "  --no-color         Disable ANSI colors"
-    echo "  -h, --help         Show this help message"
+    echo "  -s <serial>            Target specific device serial / IP"
+    echo "  --lang <tr|en>         Force language (Turkish or English)"
+    echo "  --wake                 Run CPU core wake-up test on device"
+    echo "  --root                 Perform deep root inspection"
+    echo "  --storage-test [mb]    Run physical storage verification test (default: 100MB)"
+    echo "  --save <file>          Save terminal report to host file"
+    echo "  --json <file>          Export JSON report to host file"
+    echo "  --no-color             Disable ANSI colors"
+    echo "  -h, --help             Show this help message"
     exit 0
 }
 

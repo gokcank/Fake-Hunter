@@ -33,6 +33,21 @@
     <string name="warn_android_spoofed">Görünen Android sürümü sahte!</string>
     <string name="warn_known_fake">Bilinen sahte yonga seti kimliği tespit edildi!</string>
 
+    <!-- Root ve Güvenlik -->
+    <string name="header_root">Root ve Çekirdek Güvenliği</string>
+    <string name="root_status_granted">Root: YETKİLİ (Tam Erişim)</string>
+    <string name="root_status_binary_only">Root: İkili dosya var (Yetki verilmedi)</string>
+    <string name="root_status_none">Root: Yok (Standart Kullanıcı)</string>
+    <string name="btn_deep_root_audit">Derin Root Teftişi</string>
+
+    <!-- Depolama Doğrulama Testi -->
+    <string name="header_storage_test">Fiziksel Hafıza Doğrulama Testi</string>
+    <string name="storage_test_desc">Sahte hafıza çiplerini ifşa etmek için test blokları yazıp doğrular.</string>
+    <string name="btn_start_test">Testi Başlat (500 MB)</string>
+    <string name="testing_in_progress">Hafıza test ediliyor...</string>
+    <string name="storage_test_passed">Doğrulama BAŞARILI (%1$.1f MB/s Y, %2$.1f MB/s O)</string>
+    <string name="storage_test_failed">VERİ BOZULMASI TESPİT EDİLDİ!</string>
+
     <!-- Hakkında Penceresi -->
     <string name="btn_about">Hakkında</string>
     <string name="about_title">Fake Hunter</string>

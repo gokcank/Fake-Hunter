@@ -66,11 +66,28 @@ data class StorageInfo(
         get() = String.format("%.1f GB", freeDataMb / 1024.0)
 }
 
+data class RootInfo(
+    val isRootBinaryFound: Boolean,
+    val isRootGranted: Boolean,
+    val selinuxMode: String,
+    val rawPartitions: List<String>,
+    val dmesgHighlights: List<String>
+)
+
+data class StorageTestResult(
+    val testedMb: Int,
+    val writeSpeedMbPerSec: Double,
+    val readSpeedMbPerSec: Double,
+    val isCorrupted: Boolean,
+    val message: String
+)
+
 data class AuditReport(
     val system: SystemInfo,
     val ram: RamInfo,
     val cpu: CpuInfo,
     val storage: StorageInfo,
+    val root: RootInfo,
     val verdict: Verdict,
     val issues: List<AuditIssue>
 ) {
@@ -84,6 +101,7 @@ data class AuditReport(
         sb.appendLine("RAM: ${ram.physicalGbFormatted} | Swap: ${ram.swapGbFormatted} (Inflated: ${ram.isSwapInflated})")
         sb.appendLine("CPU Cores: ${cpu.reportedCores} reported / ${cpu.activeCores} active")
         sb.appendLine("Storage (/data): ${storage.totalDataGbFormatted} (Free: ${storage.freeDataGbFormatted})")
+        sb.appendLine("Root Access: Granted=${root.isRootGranted} (Binary=${root.isRootBinaryFound}, SELinux=${root.selinuxMode})")
         if (issues.isNotEmpty()) {
             sb.appendLine("\nFindings:")
             issues.forEach { issue ->

@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.sp
 import com.gokcank.fakehunter.core.detector.HardwareDetector
 import com.gokcank.fakehunter.core.model.AuditReport
 import com.gokcank.fakehunter.core.model.IssueSeverity
+import com.gokcank.fakehunter.core.model.StorageTestResult
 import com.gokcank.fakehunter.core.model.Verdict
+import com.gokcank.fakehunter.core.storage.StorageTester
 
 class MainActivity : ComponentActivity() {
 
@@ -36,14 +38,37 @@ class MainActivity : ComponentActivity() {
             ModernAppTheme {
                 var report by remember { mutableStateOf(HardwareDetector.performAudit(this@MainActivity)) }
                 var isInspecting by remember { mutableStateOf(false) }
+                var isStorageTesting by remember { mutableStateOf(false) }
+                var storageTestProgress by remember { mutableStateOf(0) }
+                var storageTestStatus by remember { mutableStateOf("") }
+                var storageTestResult by remember { mutableStateOf<StorageTestResult?>(null) }
 
-                fun runInspection(wake: Boolean = false) {
+                fun runInspection(wake: Boolean = false, requestRoot: Boolean = false) {
                     isInspecting = true
                     Thread {
-                        val result = HardwareDetector.performAudit(this@MainActivity, wakeTest = wake)
+                        val result = HardwareDetector.performAudit(this@MainActivity, wakeTest = wake, requestRoot = requestRoot)
                         runOnUiThread {
                             report = result
                             isInspecting = false
+                        }
+                    }.start()
+                }
+
+                fun runStorageTest(testMb: Int = 500) {
+                    isStorageTesting = true
+                    storageTestResult = null
+                    storageTestProgress = 0
+                    storageTestStatus = "Initializing..."
+                    Thread {
+                        val result = StorageTester.runVerificationTest(this@MainActivity, testMb = testMb) { pct, msg ->
+                            runOnUiThread {
+                                storageTestProgress = pct
+                                storageTestStatus = msg
+                            }
+                        }
+                        runOnUiThread {
+                            storageTestResult = result
+                            isStorageTesting = false
                         }
                     }.start()
                 }
@@ -58,8 +83,14 @@ class MainActivity : ComponentActivity() {
                 ModernDashboard(
                     report = report,
                     isInspecting = isInspecting,
+                    isStorageTesting = isStorageTesting,
+                    storageTestProgress = storageTestProgress,
+                    storageTestStatus = storageTestStatus,
+                    storageTestResult = storageTestResult,
                     onInspect = { runInspection(wake = false) },
                     onWakeInspect = { runInspection(wake = true) },
+                    onRootInspect = { runInspection(requestRoot = true) },
+                    onRunStorageTest = { runStorageTest(500) },
                     onCopy = { copyReport() }
                 )
             }
@@ -83,8 +114,14 @@ fun ModernAppTheme(content: @Composable () -> Unit) {
 fun ModernDashboard(
     report: AuditReport,
     isInspecting: Boolean,
+    isStorageTesting: Boolean,
+    storageTestProgress: Int,
+    storageTestStatus: String,
+    storageTestResult: StorageTestResult?,
     onInspect: () -> Unit,
     onWakeInspect: () -> Unit,
+    onRootInspect: () -> Unit,
+    onRunStorageTest: () -> Unit,
     onCopy: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -120,7 +157,7 @@ fun ModernDashboard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = onInspect,
-                    enabled = !isInspecting,
+                    enabled = !isInspecting && !isStorageTesting,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
                 ) {
                     Text(
@@ -140,6 +177,7 @@ fun ModernDashboard(
             }
         }
 
+        // About Dialog
         if (showAboutDialog) {
             AlertDialog(
                 onDismissRequest = { showAboutDialog = false },
@@ -246,12 +284,11 @@ fun ModernDashboard(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Grid of 4 Cards (Landscape 2x2 layout)
+        // Grid Row 1: System Identity & Memory
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Card 1: System Identity
             MetricCard(
                 title = stringResource(R.string.header_system),
                 modifier = Modifier.weight(1f)
@@ -262,7 +299,6 @@ fun ModernDashboard(
                 Text("Android: ${report.system.reportedRelease} (API ${report.system.actualSdkLevel})", color = Color.White, fontSize = 13.sp)
             }
 
-            // Card 2: Memory
             MetricCard(
                 title = stringResource(R.string.header_memory),
                 modifier = Modifier.weight(1f)
@@ -279,11 +315,11 @@ fun ModernDashboard(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Grid Row 2: CPU Cores & Storage
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Card 3: CPU Cores
             MetricCard(
                 title = stringResource(R.string.header_cpu),
                 modifier = Modifier.weight(1f)
@@ -305,13 +341,87 @@ fun ModernDashboard(
                 }
             }
 
-            // Card 4: Storage
             MetricCard(
                 title = stringResource(R.string.header_storage),
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Total /data: ${report.storage.totalDataGbFormatted}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Text("Free Space: ${report.storage.freeDataGbFormatted}", color = Color(0xFF90A4AE), fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Grid Row 3: Root Security & Storage Verification Test
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Root Card
+            MetricCard(
+                title = stringResource(R.string.header_root),
+                modifier = Modifier.weight(1f)
+            ) {
+                val (rootColor, rootText) = when {
+                    report.root.isRootGranted -> Pair(Color(0xFF00E676), stringResource(R.string.root_status_granted))
+                    report.root.isRootBinaryFound -> Pair(Color(0xFFFFD600), stringResource(R.string.root_status_binary_only))
+                    else -> Pair(Color(0xFF90A4AE), stringResource(R.string.root_status_none))
+                }
+                Text(rootText, color = rootColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("SELinux: ${report.root.selinuxMode}", color = Color(0xFF90A4AE), fontSize = 12.sp)
+                if (report.root.rawPartitions.isNotEmpty()) {
+                    Text("Kernel Partitions: ${report.root.rawPartitions.size} devices", color = Color(0xFF00E5FF), fontSize = 12.sp)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Button(
+                    onClick = onRootInspect,
+                    enabled = !isInspecting,
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D333D))
+                ) {
+                    Text(stringResource(R.string.btn_deep_root_audit), fontSize = 11.sp, color = Color.White)
+                }
+            }
+
+            // Physical Storage Verification Test Card
+            MetricCard(
+                title = stringResource(R.string.header_storage_test),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(stringResource(R.string.storage_test_desc), color = Color(0xFF90A4AE), fontSize = 11.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (isStorageTesting) {
+                    LinearProgressIndicator(
+                        progress = { storageTestProgress / 100f },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        color = Color(0xFF00E5FF)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(storageTestStatus, color = Color(0xFF00E5FF), fontSize = 11.sp)
+                } else {
+                    Button(
+                        onClick = onRunStorageTest,
+                        enabled = !isInspecting,
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
+                    ) {
+                        Text(stringResource(R.string.btn_start_test), fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (storageTestResult != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val resColor = if (storageTestResult.isCorrupted) Color(0xFFFF1744) else Color(0xFF00E676)
+                    val resText = if (storageTestResult.isCorrupted) {
+                        stringResource(R.string.storage_test_failed) + ": " + storageTestResult.message
+                    } else {
+                        stringResource(R.string.storage_test_passed, storageTestResult.writeSpeedMbPerSec, storageTestResult.readSpeedMbPerSec)
+                    }
+                    Text(resText, color = resColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 

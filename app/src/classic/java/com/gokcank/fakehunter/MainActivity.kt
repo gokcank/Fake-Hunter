@@ -6,6 +6,7 @@ import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -14,6 +15,7 @@ import com.gokcank.fakehunter.core.detector.HardwareDetector
 import com.gokcank.fakehunter.core.model.AuditReport
 import com.gokcank.fakehunter.core.model.IssueSeverity
 import com.gokcank.fakehunter.core.model.Verdict
+import com.gokcank.fakehunter.core.storage.StorageTester
 import com.gokcank.fakehunter.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -34,6 +36,14 @@ class MainActivity : AppCompatActivity() {
             runInspection(wake = true)
         }
 
+        binding.btnDeepRootAudit.setOnClickListener {
+            runInspection(wake = false, requestRoot = true)
+        }
+
+        binding.btnStartStorageTest.setOnClickListener {
+            runStorageTest(500)
+        }
+
         binding.btnCopy.setOnClickListener {
             copyReport()
         }
@@ -45,17 +55,52 @@ class MainActivity : AppCompatActivity() {
         runInspection(wake = false)
     }
 
-    private fun runInspection(wake: Boolean) {
+    private fun runInspection(wake: Boolean = false, requestRoot: Boolean = false) {
         binding.btnInspect.isEnabled = false
         binding.btnInspect.text = "..."
 
         Thread {
-            val report = HardwareDetector.performAudit(this, wakeTest = wake)
+            val report = HardwareDetector.performAudit(this, wakeTest = wake, requestRoot = requestRoot)
             runOnUiThread {
                 currentReport = report
                 displayReport(report)
                 binding.btnInspect.isEnabled = true
                 binding.btnInspect.text = getString(R.string.btn_reinspect)
+            }
+        }.start()
+    }
+
+    private fun runStorageTest(testMb: Int = 500) {
+        binding.btnStartStorageTest.isEnabled = false
+        binding.btnInspect.isEnabled = false
+        binding.pbStorageTest.visibility = View.VISIBLE
+        binding.pbStorageTest.progress = 0
+        binding.tvStorageTestProgress.visibility = View.VISIBLE
+        binding.tvStorageTestProgress.text = "Initializing..."
+        binding.tvStorageTestResult.visibility = View.GONE
+
+        Thread {
+            val result = StorageTester.runVerificationTest(this, testMb = testMb) { pct, msg ->
+                runOnUiThread {
+                    binding.pbStorageTest.progress = pct
+                    binding.tvStorageTestProgress.text = msg
+                }
+            }
+            runOnUiThread {
+                binding.pbStorageTest.visibility = View.GONE
+                binding.tvStorageTestProgress.visibility = View.GONE
+                binding.tvStorageTestResult.visibility = View.VISIBLE
+
+                if (result.isCorrupted) {
+                    binding.tvStorageTestResult.setTextColor(Color.parseColor("#FF1744"))
+                    binding.tvStorageTestResult.text = "${getString(R.string.storage_test_failed)}: ${result.message}"
+                } else {
+                    binding.tvStorageTestResult.setTextColor(Color.parseColor("#00E676"))
+                    binding.tvStorageTestResult.text = getString(R.string.storage_test_passed, result.writeSpeedMbPerSec, result.readSpeedMbPerSec)
+                }
+
+                binding.btnStartStorageTest.isEnabled = true
+                binding.btnInspect.isEnabled = true
             }
         }.start()
     }
@@ -100,6 +145,22 @@ class MainActivity : AppCompatActivity() {
         // Storage
         binding.tvStorageTotal.text = "Total /data: ${report.storage.totalDataGbFormatted}"
         binding.tvStorageFree.text = "Free Space: ${report.storage.freeDataGbFormatted}"
+
+        // Root Security
+        val (rootText, rootColor) = when {
+            report.root.isRootGranted -> Pair(getString(R.string.root_status_granted), Color.parseColor("#00E676"))
+            report.root.isRootBinaryFound -> Pair(getString(R.string.root_status_binary_only), Color.parseColor("#FFD600"))
+            else -> Pair(getString(R.string.root_status_none), Color.parseColor("#90A4AE"))
+        }
+        binding.tvRootStatus.text = rootText
+        binding.tvRootStatus.setTextColor(rootColor)
+        binding.tvRootSelinux.text = "SELinux: ${report.root.selinuxMode}"
+        if (report.root.rawPartitions.isNotEmpty()) {
+            binding.tvRootPartitions.visibility = View.VISIBLE
+            binding.tvRootPartitions.text = "Kernel Partitions: ${report.root.rawPartitions.size} devices"
+        } else {
+            binding.tvRootPartitions.visibility = View.GONE
+        }
 
         // Findings
         binding.llFindings.removeAllViews()

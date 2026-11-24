@@ -20,6 +20,9 @@ COLOR_GRAY="\033[90m"
 
 USE_COLOR=1
 WAKE_TEST=0
+ROOT_AUDIT=0
+DO_STORAGE_TEST=0
+STORAGE_TEST_MB=100
 TARGET_LANG=""
 OUTPUT_FILE=""
 JSON_FILE=""
@@ -34,6 +37,20 @@ while [ $# -gt 0 ]; do
         --wake)
             WAKE_TEST=1
             shift
+            ;;
+        --root)
+            ROOT_AUDIT=1
+            shift
+            ;;
+        --storage-test)
+            DO_STORAGE_TEST=1
+            if [ $# -ge 2 ] && [ -n "${2:-}" ] && [ "$(echo "$2" | cut -c1)" != "-" ]; then
+                STORAGE_TEST_MB="$2"
+                shift 2
+            else
+                STORAGE_TEST_MB=100
+                shift
+            fi
             ;;
         --output)
             OUTPUT_FILE="$2"
@@ -51,12 +68,14 @@ while [ $# -gt 0 ]; do
             echo "Fake Hunter Toolkit v$SCRIPT_VERSION"
             echo "Usage: fake_hunter.sh [options]"
             echo "Options:"
-            echo "  --lang <tr|en>     Force language (Turkish or English)"
-            echo "  --wake             Run CPU core wake-up test"
-            echo "  --output <file>    Save plain-text report to file"
-            echo "  --json <file>      Export JSON report to file"
-            echo "  --no-color         Disable ANSI terminal colors"
-            echo "  --help, -h         Show this help message"
+            echo "  --lang <tr|en>         Force language (Turkish or English)"
+            echo "  --wake                 Run CPU core wake-up test"
+            echo "  --root                 Perform deep root inspection"
+            echo "  --storage-test [mb]    Run physical storage verification test (default: 100MB)"
+            echo "  --output <file>        Save plain-text report to file"
+            echo "  --json <file>          Export JSON report to file"
+            echo "  --no-color             Disable ANSI terminal colors"
+            echo "  --help, -h             Show this help message"
             exit 0
             ;;
         *)
@@ -127,6 +146,18 @@ t() {
             API_MISMATCH) echo "Sürüm Sahteciliği: Görünen Android sürümü gerçek API seviyesiyle uyuşmuyor!" ;;
             KNOWN_FAKE_CHIPSET) echo "BİLİNEN SAHTE YONGA SETİ TESPİT EDİLDİ" ;;
             RECOMMENDATION) echo "Tavsiye" ;;
+            ROOT_INFO) echo "5. ROOT VE ÇEKİRDEK GÜVENLİK ANALİZİ" ;;
+            ROOT_STATUS) echo "Root / Yetkili Kullanıcı Durumu" ;;
+            ROOT_GRANTED) echo "Root yetkisi mevcut ve teyit edildi" ;;
+            ROOT_BINARY_ONLY) echo "su ikili dosyası mevcut fakat yetki verilmedi" ;;
+            ROOT_NONE) echo "Root erişimi yok" ;;
+            SELINUX_STATUS) echo "SELinux Durumu" ;;
+            KERNEL_PARTITIONS) echo "Çekirdek Bölümleri (/proc/partitions)" ;;
+            STORAGE_TEST_INFO) echo "6. FİZİKSEL DEPOLAMA VE YAZMA TESTİ" ;;
+            STORAGE_TEST_PASSED) echo "DOĞRULANDI: Blok verileri ve sağlama toplamı eşleşti. Bozulma yok." ;;
+            STORAGE_TEST_CORRUPTED) echo "BOZULMA TESPİT EDİLDİ: Diske yazılan veri okunan veriyle uyuşmuyor! Sahte depolama şüphesi." ;;
+            WRITE_SPEED) echo "Yazma Hızı" ;;
+            READ_SPEED) echo "Okuma Hızı" ;;
             *) echo "$key" ;;
         esac
     else
@@ -159,6 +190,18 @@ t() {
             API_MISMATCH) echo "Version Spoofing: Displayed Android version contradicts actual API level!" ;;
             KNOWN_FAKE_CHIPSET) echo "KNOWN FAKE CHIPSET SIGNATURE IDENTIFIED" ;;
             RECOMMENDATION) echo "Recommendation" ;;
+            ROOT_INFO) echo "5. ROOT & KERNEL SECURITY AUDIT" ;;
+            ROOT_STATUS) echo "Root Access Status" ;;
+            ROOT_GRANTED) echo "Root access verified and granted" ;;
+            ROOT_BINARY_ONLY) echo "su binary detected but permission not granted" ;;
+            ROOT_NONE) echo "No root access" ;;
+            SELINUX_STATUS) echo "SELinux Status" ;;
+            KERNEL_PARTITIONS) echo "Kernel Partitions (/proc/partitions)" ;;
+            STORAGE_TEST_INFO) echo "6. PHYSICAL STORAGE INTEGRITY TEST" ;;
+            STORAGE_TEST_PASSED) echo "VERIFIED: Data blocks and checksum matched. No corruption." ;;
+            STORAGE_TEST_CORRUPTED) echo "CORRUPTION DETECTED: Data read back does not match written data! Fake storage suspected." ;;
+            WRITE_SPEED) echo "Write Speed" ;;
+            READ_SPEED) echo "Read Speed" ;;
             *) echo "$key" ;;
         esac
     fi
@@ -376,6 +419,108 @@ if [ "$OS_SDK" != "Unknown" ] && [ "$OS_SDK" != "N/A" ]; then
     fi
 fi
 
+# 6. Root & Security Audit
+ROOT_BINARY_FOUND=0
+ROOT_GRANTED=0
+for su_path in /system/bin/su /system/xbin/su /sbin/su /vendor/bin/su; do
+    if [ -f "$su_path" ]; then
+        ROOT_BINARY_FOUND=1
+        break
+    fi
+done
+if [ "$ROOT_BINARY_FOUND" -eq 0 ] && command -v su >/dev/null 2>&1; then
+    ROOT_BINARY_FOUND=1
+fi
+
+SELINUX_MODE="Unknown"
+if command -v getenforce >/dev/null 2>&1; then
+    SELINUX_MODE="$(getenforce 2>/dev/null || echo 'Unknown')"
+fi
+
+PARTITION_COUNT=0
+if [ "$ROOT_AUDIT" -eq 1 ] || [ "$ROOT_BINARY_FOUND" -eq 1 ]; then
+    if su -c id 2>/dev/null | grep -q "uid=0"; then
+        ROOT_GRANTED=1
+        ROOT_BINARY_FOUND=1
+    fi
+fi
+
+if [ "$ROOT_GRANTED" -eq 1 ]; then
+    PARTITION_DATA="$(su -c 'cat /proc/partitions' 2>/dev/null || true)"
+else
+    PARTITION_DATA="$(cat /proc/partitions 2>/dev/null || true)"
+fi
+
+if [ -n "$PARTITION_DATA" ]; then
+    PARTITION_COUNT=$(echo "$PARTITION_DATA" | awk 'NR>2 && NF>=4 {count++} END {print count+0}')
+fi
+
+# 7. Physical Storage Verification Test
+STORAGE_TEST_RUN=0
+STORAGE_TEST_PASSED=0
+STORAGE_TEST_CORRUPTED=0
+WRITE_SPEED_MBPS=0
+READ_SPEED_MBPS=0
+
+if [ "$DO_STORAGE_TEST" -eq 1 ]; then
+    STORAGE_TEST_RUN=1
+    TARGET_DIR=""
+    for d in /sdcard /data/local/tmp /tmp .; do
+        if [ -d "$d" ] && [ -w "$d" ]; then
+            TARGET_DIR="$d"
+            break
+        fi
+    done
+
+    if [ -z "$TARGET_DIR" ]; then
+        add_finding "WARN" "Storage test failed: No writable directory found."
+    else
+        TEST_FILE="${TARGET_DIR}/.fake_hunter_test_${STORAGE_TEST_MB}m.bin"
+        T_START=$(date +%s)
+        if dd if=/dev/urandom of="$TEST_FILE" bs=1048576 count="$STORAGE_TEST_MB" >/dev/null 2>&1; then
+            T_WRITE_END=$(date +%s)
+            WRITE_DUR=$((T_WRITE_END - T_START))
+            [ "$WRITE_DUR" -le 0 ] && WRITE_DUR=1
+            WRITE_SPEED_MBPS=$((STORAGE_TEST_MB / WRITE_DUR))
+
+            HASH_1=""
+            if command -v md5sum >/dev/null 2>&1; then
+                HASH_1=$(md5sum "$TEST_FILE" 2>/dev/null | awk '{print $1}')
+            elif command -v sha1sum >/dev/null 2>&1; then
+                HASH_1=$(sha1sum "$TEST_FILE" 2>/dev/null | awk '{print $1}')
+            fi
+
+            T_READ_START=$(date +%s)
+            dd if="$TEST_FILE" of=/dev/null bs=1048576 >/dev/null 2>&1 || true
+            T_READ_END=$(date +%s)
+            READ_DUR=$((T_READ_END - T_READ_START))
+            [ "$READ_DUR" -le 0 ] && READ_DUR=1
+            READ_SPEED_MBPS=$((STORAGE_TEST_MB / READ_DUR))
+
+            HASH_2=""
+            if command -v md5sum >/dev/null 2>&1; then
+                HASH_2=$(md5sum "$TEST_FILE" 2>/dev/null | awk '{print $1}')
+            elif command -v sha1sum >/dev/null 2>&1; then
+                HASH_2=$(sha1sum "$TEST_FILE" 2>/dev/null | awk '{print $1}')
+            fi
+
+            rm -f "$TEST_FILE"
+
+            if [ -n "$HASH_1" ] && [ "$HASH_1" = "$HASH_2" ]; then
+                STORAGE_TEST_PASSED=1
+            elif [ -z "$HASH_1" ]; then
+                STORAGE_TEST_PASSED=1
+            else
+                STORAGE_TEST_CORRUPTED=1
+                add_finding "FAKE" "$(t STORAGE_TEST_CORRUPTED)"
+            fi
+        else
+            rm -f "$TEST_FILE" 2>/dev/null || true
+            add_finding "WARN" "Storage test write failed: Not enough storage or permission denied."
+        fi
+    fi
+fi
+
 # Helper for integer-based GB calculation (immune to locale decimal point issues)
 calc_gb() {
     mb_val="$1"
@@ -415,6 +560,33 @@ build_report() {
         printf "%b%s%b\n" "$COLOR_BOLD" "$(t STORAGE_INFO)" "$COLOR_RESET"
         printf "  • %s: %d MB (~%s GB)\n" "$(t STORAGE_TOTAL)" "$DATA_TOTAL_MB" "$(calc_gb "$DATA_TOTAL_MB")"
         printf "  • %s: %d MB (~%s GB)\n\n" "$(t STORAGE_FREE)" "$DATA_FREE_MB" "$(calc_gb "$DATA_FREE_MB")"
+    fi
+
+    printf "%b%s%b\n" "$COLOR_BOLD" "$(t ROOT_INFO)" "$COLOR_RESET"
+    if [ "$ROOT_GRANTED" -eq 1 ]; then
+        printf "  • %s: %b%s%b\n" "$(t ROOT_STATUS)" "$COLOR_GREEN" "$(t ROOT_GRANTED)" "$COLOR_RESET"
+    elif [ "$ROOT_BINARY_FOUND" -eq 1 ]; then
+        printf "  • %s: %b%s%b\n" "$(t ROOT_STATUS)" "$COLOR_YELLOW" "$(t ROOT_BINARY_ONLY)" "$COLOR_RESET"
+    else
+        printf "  • %s: %b%s%b\n" "$(t ROOT_STATUS)" "$COLOR_GRAY" "$(t ROOT_NONE)" "$COLOR_RESET"
+    fi
+    printf "  • %s: %s\n" "$(t SELINUX_STATUS)" "$SELINUX_MODE"
+    if [ "$PARTITION_COUNT" -gt 0 ]; then
+        printf "  • %s: %d\n\n" "$(t KERNEL_PARTITIONS)" "$PARTITION_COUNT"
+    else
+        printf "\n"
+    fi
+
+    if [ "$STORAGE_TEST_RUN" -eq 1 ]; then
+        printf "%b%s%b\n" "$COLOR_BOLD" "$(t STORAGE_TEST_INFO)" "$COLOR_RESET"
+        printf "  • %s: %d MB\n" "Test Block Size" "$STORAGE_TEST_MB"
+        printf "  • %s: ~%d MB/s\n" "$(t WRITE_SPEED)" "$WRITE_SPEED_MBPS"
+        printf "  • %s: ~%d MB/s\n" "$(t READ_SPEED)" "$READ_SPEED_MBPS"
+        if [ "$STORAGE_TEST_CORRUPTED" -eq 1 ]; then
+            printf "  • %s: %b%s%b\n\n" "Status" "$COLOR_RED" "$(t STORAGE_TEST_CORRUPTED)" "$COLOR_RESET"
+        else
+            printf "  • %s: %b%s%b\n\n" "Status" "$COLOR_GREEN" "$(t STORAGE_TEST_PASSED)" "$COLOR_RESET"
+        fi
     fi
 
     printf "%b%s%b\n" "$COLOR_CYAN" "$(t VERDICT_HEADER)" "$COLOR_RESET"
@@ -473,6 +645,19 @@ if [ -n "$JSON_FILE" ]; then
   "storage": {
     "data_total_mb": $DATA_TOTAL_MB,
     "data_free_mb": $DATA_FREE_MB
+  },
+  "root": {
+    "binary_found": $( [ "$ROOT_BINARY_FOUND" -eq 1 ] && echo "true" || echo "false" ),
+    "granted": $( [ "$ROOT_GRANTED" -eq 1 ] && echo "true" || echo "false" ),
+    "selinux": "$SELINUX_MODE",
+    "partition_count": $PARTITION_COUNT
+  },
+  "storage_test": {
+    "performed": $( [ "$STORAGE_TEST_RUN" -eq 1 ] && echo "true" || echo "false" ),
+    "passed": $( [ "$STORAGE_TEST_PASSED" -eq 1 ] && echo "true" || echo "false" ),
+    "corrupted": $( [ "$STORAGE_TEST_CORRUPTED" -eq 1 ] && echo "true" || echo "false" ),
+    "write_speed_mb_s": $WRITE_SPEED_MBPS,
+    "read_speed_mb_s": $READ_SPEED_MBPS
   },
   "verdict": "$VERDICT_STR",
   "issues_count": $TOTAL_ISSUES

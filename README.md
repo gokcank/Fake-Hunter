@@ -21,8 +21,10 @@ Pazardaki birçok Android multimedya teybi ve TV kutusu (özellikle AC8227L, All
 1. **Ham Bellek Denetimi:** `/proc/meminfo` çekirdek dökümünü doğrudan okuyarak gerçek fiziksel RAM (`MemTotal`) ile takas alanını (`SwapTotal`) ayrıştırır ve şişirmeyi ifşa eder.
 2. **Çekirdek Frekans Taraması:** `/sys/devices/system/cpu/` ve `/proc/cpuinfo` üzerinden tüm çekirdekleri gerçek zamanlı tarar. Frekans üretmeyen sahte çekirdekleri yakalar (isteğe bağlı çekirdek uyandırma testi mevcuttur).
 3. **Gerçek Depolama Boyutu:** `/data` kullanıcı bölümünü donanım seviyesinde sorgulayarak şişirilmiş depolama boyutunu açığa çıkarır.
-4. **Bilinen Sahte Platform İmzaları:** AC8227L, Allwinner T3/T3L/T5, MT6580 ve Rockchip RK3128/3228 gibi meşhur sahte platformları anakart ve yonga imzalarından doğrudan tanır.
-5. **Sürüm Tutarsızlığı Kontrolü:** Gerçek çekirdek API seviyesi (`SDK_INT`) ile arayüzdeki sürüm dizgisini karşılaştırır.
+4. **Fiziksel Depolama Doğrulama Testi:** Sahte hafıza çiplerini (ör. 16 GB iken yazılımla 64 GB/128 GB gösterilen depolama) yakalamak için rastgele veri blokları yazıp geri okur, CRC32 sağlama toplamı ile bozulmayı tespit eder ve yazma/okuma hızını ölçer.
+5. **İsteğe Bağlı Root ve Çekirdek Denetimi:** Cihaz root edilmişse çekirdek blok bölümlerini (`/proc/partitions`), dmesg sistem günlüklerini ve SELinux durumunu derinlemesine analiz eder.
+6. **Bilinen Sahte Platform İmzaları:** AC8227L, Allwinner T3/T3L/T5, MT6580 ve Rockchip RK3128/3228 gibi meşhur sahte platformları anakart ve yonga imzalarından doğrudan tanır.
+7. **Sürüm Tutarsızlığı Kontrolü:** Gerçek çekirdek API seviyesi (`SDK_INT`) ile arayüzdeki sürüm dizgisini karşılaştırır.
 
 ### Araç Seti Bileşenleri
 1. **Android Uygulaması (`app/`):**
@@ -47,8 +49,10 @@ Budget Android Head Units and TV streaming boxes from various marketplaces frequ
 1. **Direct Memory Parsing:** Reads `/proc/meminfo` directly, calculating real physical RAM (`MemTotal`) vs Swap (`SwapTotal`).
 2. **Core Frequency Auditing:** Scans `/sys/devices/system/cpu/` and `/proc/cpuinfo` to verify active clock frequencies per core.
 3. **Storage Sizing:** Queries actual partition boundaries on `/data` using `StatFs`.
-4. **Chipset Signature Database:** Identifies notorious counterfeit chips (AC8227L, Allwinner T3, MT6580, Rockchip RK3128/3228).
-5. **API Level Discrepancy:** Verifies reported OS release strings against actual `Build.VERSION.SDK_INT`.
+4. **Physical Storage Verification Test:** Detects spoofed flash storage (e.g. 16GB chips flashed to report 64GB/128GB) by writing pseudo-random blocks, verifying integrity with CRC32, and benchmarking read/write throughput.
+5. **Optional Deep Root & Kernel Audit:** Inspects raw kernel block partitions (`/proc/partitions`), dmesg logs, and SELinux state when root access is present.
+6. **Chipset Signature Database:** Identifies notorious counterfeit chips (AC8227L, Allwinner T3, MT6580, Rockchip RK3128/3228).
+7. **API Level Discrepancy:** Verifies reported OS release strings against actual `Build.VERSION.SDK_INT`.
 
 ---
 

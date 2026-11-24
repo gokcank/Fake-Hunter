@@ -23,7 +23,7 @@ Hardware authenticity and fraud detection toolkit for Android Head Units (car mu
 
 ## Status (as of 2026-11-24)
 - Project status: **active** (set 2026-11-24; source of truth: the brain page).
-- Version: 1.0.0. Core detection, dual flavors, CLI/ADB scripts, and test emulator verified.
+- Version: 1.0.0. Core detection, dual flavors, CLI/ADB scripts, root deep audit, physical storage verification test, and test emulator verified.
 
 ## Open items
 - [ ] Expand automated unit/instrumentation tests.

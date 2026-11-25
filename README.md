@@ -13,9 +13,19 @@
 
 ## 📸 Ekran Görüntüleri / Showcase
 
-| Modern Teftiş Paneli (Compose) | Çevrimdışı QR Kod Özeti | Ayarlar & Dil Seçimi | Klasik Arayüz (XML Views) |
-| :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/modern_dashboard.png" width="220" alt="Modern Dashboard"/> | <img src="docs/screenshots/qr_summary.png" width="220" alt="QR Summary"/> | <img src="docs/screenshots/settings.png" width="220" alt="Settings Dialog"/> | <img src="docs/screenshots/classic_dashboard.png" width="220" alt="Classic Dashboard"/> |
+| 🚗 Araç Multimedya Teftişi (1024x600 Geniş Ekran) | 📱 Telefona Anında QR Transferi |
+| :---: | :---: |
+| <img src="docs/screenshots/headunit_dashboard.png" width="560" alt="Android Head Unit Dashboard"/> | <img src="docs/screenshots/qr_summary.png" width="220" alt="Mobile QR Code Transfer"/> |
+
+<details>
+<summary>🔍 Diğer Arayüzler & Ekranlar / Additional Views (Classic XML, Settings, Widescreen QR)</summary>
+<br>
+
+| Klasik Arayüz (XML Views) | Geniş Ekran QR Özeti | Ayarlar & Dil Seçimi |
+| :---: | :---: | :---: |
+| <img src="docs/screenshots/headunit_classic.png" width="300" alt="Classic Head Unit XML View"/> | <img src="docs/screenshots/headunit_qr.png" width="300" alt="Widescreen QR Summary"/> | <img src="docs/screenshots/settings.png" width="200" alt="Settings Dialog"/> |
+
+</details>
 
 ---
 

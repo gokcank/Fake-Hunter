@@ -486,21 +486,72 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAboutDialog() {
-        val message = StringBuilder().apply {
-            appendLine(getString(R.string.about_version, BuildConfig.VERSION_NAME))
-            appendLine()
-            appendLine(getString(R.string.about_description))
-            appendLine()
-            appendLine(getString(R.string.about_privacy_title))
-            appendLine(getString(R.string.about_privacy_desc))
-            appendLine()
-            appendLine(getString(R.string.about_license_text))
-            appendLine(getString(R.string.about_github_url))
-        }.toString()
+        val p = (20 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#1C2026"))
+            setPadding(p, p, p, p)
+        }
+
+        val scrollView = ScrollView(this).apply {
+            addView(container)
+        }
+
+        // Version
+        container.addView(TextView(this).apply {
+            text = getString(R.string.about_version, BuildConfig.VERSION_NAME)
+            setTextColor(Color.parseColor("#00E5FF"))
+            textSize = 13f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        })
+
+        // Description
+        container.addView(TextView(this).apply {
+            text = getString(R.string.about_description)
+            setTextColor(Color.parseColor("#CFD8DC"))
+            textSize = 13f
+            val m = (8 * resources.displayMetrics.density).toInt()
+            setPadding(0, m, 0, m)
+        })
+
+        // Privacy Title
+        container.addView(TextView(this).apply {
+            text = getString(R.string.about_privacy_title)
+            setTextColor(Color.parseColor("#00E676"))
+            textSize = 14f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            val m = (4 * resources.displayMetrics.density).toInt()
+            setPadding(0, m, 0, 0)
+        })
+
+        // Privacy Desc
+        container.addView(TextView(this).apply {
+            text = getString(R.string.about_privacy_desc)
+            setTextColor(Color.parseColor("#90A4AE"))
+            textSize = 12f
+            val m = (4 * resources.displayMetrics.density).toInt()
+            setPadding(0, m, 0, (8 * resources.displayMetrics.density).toInt())
+        })
+
+        // License
+        container.addView(TextView(this).apply {
+            text = getString(R.string.about_license_text)
+            setTextColor(Color.parseColor("#CFD8DC"))
+            textSize = 12f
+        })
+
+        // GitHub URL
+        container.addView(TextView(this).apply {
+            text = getString(R.string.about_github_url)
+            setTextColor(Color.parseColor("#00E5FF"))
+            textSize = 12f
+            val m = (4 * resources.displayMetrics.density).toInt()
+            setPadding(0, m, 0, 0)
+        })
 
         MaterialAlertDialogBuilder(this, R.style.Theme_FakeHunter_Dialog)
             .setTitle(getString(R.string.about_title))
-            .setMessage(message)
+            .setView(scrollView)
             .setPositiveButton(getString(R.string.btn_close), null)
             .show()
     }

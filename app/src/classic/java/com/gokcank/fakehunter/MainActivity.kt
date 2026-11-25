@@ -3,15 +3,16 @@ package com.gokcank.fakehunter
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.gokcank.fakehunter.core.detector.HardwareDetector
 import com.gokcank.fakehunter.core.export.EvidenceCollector
 import com.gokcank.fakehunter.core.model.AuditOptions
@@ -164,7 +165,7 @@ class MainActivity : AppCompatActivity() {
             addView(imageView)
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this, R.style.Theme_FakeHunter_Dialog)
             .setTitle(getString(R.string.qr_dialog_title))
             .setView(container)
             .setPositiveButton(getString(R.string.btn_close), null)
@@ -177,6 +178,10 @@ class MainActivity : AppCompatActivity() {
         var autoRoot = SettingsManager.isAutoRoot(this)
         var storageMb = SettingsManager.getStorageTestMb(this)
 
+        val accentColor = Color.parseColor("#00E5FF")
+        val cyanCsl = ColorStateList.valueOf(accentColor)
+        val cardStrokeColor = Color.parseColor("#2D333D")
+
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val p = (16 * resources.displayMetrics.density).toInt()
@@ -186,26 +191,32 @@ class MainActivity : AppCompatActivity() {
         // Language radio group
         val tvLangHeader = TextView(this).apply {
             text = getString(R.string.settings_language)
-            setTextColor(Color.parseColor("#00E5FF"))
+            setTextColor(accentColor)
             textSize = 14f
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
         container.addView(tvLangHeader)
 
-        val rgLang = RadioGroup(this)
+        val rgLang = RadioGroup(this).apply {
+            val pTop = (4 * resources.displayMetrics.density).toInt()
+            setPadding(0, pTop, 0, 0)
+        }
         val rbSystem = RadioButton(this).apply {
             text = getString(R.string.settings_lang_system)
             setTextColor(Color.WHITE)
+            buttonTintList = cyanCsl
             isChecked = selectedLang == SettingsManager.LANG_SYSTEM
         }
         val rbTr = RadioButton(this).apply {
             text = getString(R.string.settings_lang_tr)
             setTextColor(Color.WHITE)
+            buttonTintList = cyanCsl
             isChecked = selectedLang == SettingsManager.LANG_TR
         }
         val rbEn = RadioButton(this).apply {
             text = getString(R.string.settings_lang_en)
             setTextColor(Color.WHITE)
+            buttonTintList = cyanCsl
             isChecked = selectedLang == SettingsManager.LANG_EN
         }
         rgLang.addView(rbSystem)
@@ -215,9 +226,10 @@ class MainActivity : AppCompatActivity() {
 
         // Divider
         container.addView(View(this).apply {
-            setBackgroundColor(Color.parseColor("#2D333D"))
+            setBackgroundColor(cardStrokeColor)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 2).apply {
-                setMargins(0, 16, 0, 16)
+                val m = (12 * resources.displayMetrics.density).toInt()
+                setMargins(0, m, 0, m)
             }
         })
 
@@ -225,6 +237,7 @@ class MainActivity : AppCompatActivity() {
         val cbAutoRoot = CheckBox(this).apply {
             text = getString(R.string.settings_auto_root)
             setTextColor(Color.WHITE)
+            buttonTintList = cyanCsl
             isChecked = autoRoot
         }
         container.addView(cbAutoRoot)
@@ -232,30 +245,40 @@ class MainActivity : AppCompatActivity() {
             text = getString(R.string.settings_auto_root_desc)
             setTextColor(Color.parseColor("#90A4AE"))
             textSize = 11f
+            val pStart = (28 * resources.displayMetrics.density).toInt()
+            setPadding(pStart, 0, 0, 0)
         })
 
         // Divider
         container.addView(View(this).apply {
-            setBackgroundColor(Color.parseColor("#2D333D"))
+            setBackgroundColor(cardStrokeColor)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 2).apply {
-                setMargins(0, 16, 0, 16)
+                val m = (12 * resources.displayMetrics.density).toInt()
+                setMargins(0, m, 0, m)
             }
         })
 
         // Storage Test Size
         val tvStorageHeader = TextView(this).apply {
             text = getString(R.string.settings_storage_test)
-            setTextColor(Color.parseColor("#00E5FF"))
+            setTextColor(accentColor)
             textSize = 14f
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
         container.addView(tvStorageHeader)
+        container.addView(TextView(this).apply {
+            text = getString(R.string.settings_storage_test_desc)
+            setTextColor(Color.parseColor("#90A4AE"))
+            textSize = 11f
+            setPadding(0, 2, 0, 4)
+        })
 
         val rgStorage = RadioGroup(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(100, 250, 500).forEach { size ->
             val rb = RadioButton(this).apply {
                 text = "$size MB"
                 setTextColor(Color.WHITE)
+                buttonTintList = cyanCsl
                 isChecked = storageMb == size
                 setOnClickListener { storageMb = size }
             }
@@ -263,7 +286,7 @@ class MainActivity : AppCompatActivity() {
         }
         container.addView(rgStorage)
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this, R.style.Theme_FakeHunter_Dialog)
             .setTitle(getString(R.string.settings_title))
             .setView(container)
             .setPositiveButton(getString(R.string.btn_close)) { _, _ ->
@@ -475,7 +498,7 @@ class MainActivity : AppCompatActivity() {
             appendLine(getString(R.string.about_github_url))
         }.toString()
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this, R.style.Theme_FakeHunter_Dialog)
             .setTitle(getString(R.string.about_title))
             .setMessage(message)
             .setPositiveButton(getString(R.string.btn_close), null)

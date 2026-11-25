@@ -1,58 +1,81 @@
-# Fake Hunter Toolkit 🛡️
+# Fake Hunter 🛡️
+
+### Android Multimedya, Teyp ve TV Kutuları İçin Donanım Doğrulama ve Sahtecilik Tespit Kiti
+### Hardware Authenticity & Fraud Detection Toolkit for Android Head Units & TV Boxes
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-5.0%2B%20(API%2021%2B)-green.svg)](https://developer.android.com)
-[![Permissions](https://img.shields.io/badge/Permissions-Zero%20Internet-brightgreen.svg)](#privacy--security)
-[![Architecture](https://img.shields.io/badge/Architecture-Dual%20Flavor%20(Modern%20%26%20Classic)-orange.svg)](#flavors)
+[![Permissions](https://img.shields.io/badge/Permissions-Zero%20Internet-brightgreen.svg)](#-gizlilik-ve-g%C3%BCvenlik--privacy--security)
+[![Release](https://img.shields.io/badge/Release-v1.1.0-orange.svg)](https://github.com/gokcank/Fake-Hunter/releases/tag/v1.1.0)
+[![Release Notes](https://img.shields.io/badge/Changelog-RELEASE__NOTES-blueviolet.svg)](RELEASE_NOTES.md)
 
-**Fake Hunter** is an open-source hardware verification and fraud detection toolkit designed for Android Head Units (car multimedia systems), Android TV boxes, tablets, and smartphones.
+---
+
+## 📸 Ekran Görüntüleri / Showcase
+
+| Modern Teftiş Paneli (Compose) | Çevrimdışı QR Kod Özeti | Ayarlar & Dil Seçimi | Klasik Arayüz (XML Views) |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/modern_dashboard.png" width="220" alt="Modern Dashboard"/> | <img src="docs/screenshots/qr_summary.png" width="220" alt="QR Summary"/> | <img src="docs/screenshots/settings.png" width="220" alt="Settings Dialog"/> | <img src="docs/screenshots/classic_dashboard.png" width="220" alt="Classic Dashboard"/> |
+
+---
+
+## 🎯 3 Maddede Fake Hunter Nedir? / What is Fake Hunter?
+
+* 🚗 **Oto Teyp & Multimedya Alışverişinde Hile Kalkanı:** Piyasada "8 Çekirdek, 8 GB RAM, 128 GB Hafıza, Android 14" etiketiyle satılan ancak gerçekte 4 çekirdekli eski bir yongaya (AC8227L, Allwinner T3 vb.) ve Android 8.1 ROM'una sahip cihazları saniyeler içinde ifşa eder.
+* 💾 **Sahte Depolama (NAND Flash) ve RAM Şişirmesi Tespiti:** ROM dosyalarını yanıltan sahte bilgileri es geçer; çekirdek dökümlerini (`/proc/meminfo`), raw sektör boyutunu (`/sys/block/*/size`) inceler ve 100 MB rastgele veri yazıp doğrulayarak sahte hafızayı bozulma (corruption) ile yakalar.
+* 🛡️ **%100 Çevrimdışı & Adli Kanıt Kaydı:** Sıfır internet izni ister. Elde ettiği donanım kanıtlarını USB belleğe adli `.zip` arşivi olarak kaydeder veya tek dokunuşla ekranda QR koda dökerek telefonunuzun kamerasıyla yanınıza almanızı sağlar.
+
+---
+
+## ⚡ Hızlı Karar Rehberi / Quick Verdict Table
+
+Mağazada veya araçta teybe Fake Hunter taktığınızda çıkan ekrana göre 5 saniyede karar verin:
+
+| Bildirilen Özellik | Fiziksel RAM (`MemTotal`) | Takas / ZRAM (`SwapTotal`) | Çekirdek Frekansı | Karar / Verdict |
+| :--- | :--- | :--- | :--- | :--- |
+| **İddia: 8 GB RAM** | **7200 MB ve üzeri** | 0 - 2000 MB | 8 çekirdek aktif frekansta | ✅ **GERÇEK 8 GB** (Orijinal, alınabilir) |
+| **İddia: 6 GB RAM** | **5400 - 6200 MB** | 0 - 2000 MB | 8 çekirdek aktif frekansta | ✅ **GERÇEK 6 GB** (Orijinal) |
+| **İddia: 6 veya 8 GB** | **3800 - 4200 MB** | **3000 MB ve üzeri** | Yalnızca 4 çekirdek frekans üretiyor | ❌ **SAHTE DONANIM** (Aslında 4 GB RAM + SWAP şişirmesi) |
+| **İddia: 4 veya 8 GB** | **1800 - 2400 MB** | **2000 MB ve üzeri** | 4 çekirdek | ❌ **SAHTE DONANIM** (Aslında 2 GB RAM) |
+| **İddia: 64/128 GB ROM** | - | - | Depolama Testi: **Bozulma (Corruption)** | ❌ **SAHTE HAFIZA** (Yazılımla şişirilmiş 16 GB NAND) |
 
 ---
 
 ## 🇹🇷 Türkçe Açıklama
 
-### Problem: Sahte Donanım Tuzağı
-Pazardaki birçok Android multimedya teybi ve TV kutusu (özellikle AC8227L, Allwinner T3 veya MT6580 yongalı cihazlar), yazılımsal modifikasyonlarla yanıltıcı bilgiler sunar:
-* **Sahte 8 Çekirdek:** Aslında 4 çekirdekli eski bir yonga olmasına rağmen sistem dosyaları 8 çekirdek gösterecek şekilde modifiye edilir; sahte çekirdekler frekans üretmez.
-* **Şişirilmiş 8 GB RAM:** Cihazda fiziksel olarak 1 GB veya 2 GB RAM bulunurken, takas alanı (SWAP/ZRAM) fiziksel bellek gibi gösterilerek 4 GB veya 8 GB olarak pazarlanır.
-* **Sahte Android Sürümü:** Cihazın arka planda Android 8.1 (Oreo) veya Android 10 (Q) çalıştırmasına rağmen arayüzde "Android 13" veya "Android 14" yazdırılır.
+### Problem: Pazardaki Sahte Donanım Tuzağı
+Özellikle Çin menşeili Android teypler, araç multimedya ekranları ve TV kutuları, sistem ayarları ve popüler test uygulamalarını kandırmak üzere modifiye edilmiş yazılımlarla gelir:
+1. **Sahte 8 Çekirdek:** 4 çekirdekli yongaların sistem dosyaları 8 çekirdek gösterecek şekilde yamalanır; sahte çekirdekler frekans üretmez veya boştadır.
+2. **SWAP ile Şişirilmiş RAM:** 2 GB veya 4 GB fiziksel bellek, takas alanı (SWAP/ZRAM) eklenerek toplam sanal değer üzerinden "6 GB" veya "8 GB" olarak etiketlenir.
+3. **Sahte Depolama Kapasitesi:** 16 GB veya 32 GB kapasiteli ucuz flash yongalar, partition tabloları manipüle edilerek sistemde 64 GB veya 128 GB gösterilir; veri yazıldığında eski verilerin üzerine yazar veya çöker.
+4. **Sahte Android Sürümü:** Sistem ayarlarında "Android 13" veya "Android 14" yazsa da çekirdekte eski Android 8.1 (Oreo) veya Android 10 (Q) çalışır.
 
-### Fake Hunter Nasıl Tespit Eder?
-1. **Ham Bellek Denetimi:** `/proc/meminfo` çekirdek dökümünü doğrudan okuyarak gerçek fiziksel RAM (`MemTotal`) ile takas alanını (`SwapTotal`) ayrıştırır ve şişirmeyi ifşa eder.
-2. **Çekirdek Frekans Taraması:** `/sys/devices/system/cpu/` ve `/proc/cpuinfo` üzerinden tüm çekirdekleri gerçek zamanlı tarar. Frekans üretmeyen sahte çekirdekleri yakalar (isteğe bağlı çekirdek uyandırma testi mevcuttur).
-3. **Gerçek Depolama Boyutu:** `/data` kullanıcı bölümünü donanım seviyesinde sorgulayarak şişirilmiş depolama boyutunu açığa çıkarır.
-4. **Fiziksel Depolama Doğrulama Testi:** Sahte hafıza çiplerini (ör. 16 GB iken yazılımla 64 GB/128 GB gösterilen depolama) yakalamak için rastgele veri blokları yazıp geri okur, CRC32 sağlama toplamı ile bozulmayı tespit eder ve yazma/okuma hızını ölçer.
-5. **İsteğe Bağlı Root ve Çekirdek Denetimi:** Cihaz root edilmişse çekirdek blok bölümlerini (`/proc/partitions`), dmesg sistem günlüklerini ve SELinux durumunu derinlemesine analiz eder.
-6. **Bilinen Sahte Platform İmzaları:** AC8227L, Allwinner T3/T3L/T5, MT6580 ve Rockchip RK3128/3228 gibi meşhur sahte platformları anakart ve yonga imzalarından doğrudan tanır.
-7. **Sürüm Tutarsızlığı Kontrolü:** Gerçek çekirdek API seviyesi (`SDK_INT`) ile arayüzdeki sürüm dizgisini karşılaştırır.
-
-### Araç Seti Bileşenleri
-1. **Android Uygulaması (`app/`):**
-   * **Modern Varyant (Jetpack Compose):** 1024x600 ve üzeri multimedya ekranlarına uygun modern, reaktif kontrol paneli.
-   * **Klasik Varyant (XML Views):** En zayıf donanımlı (Mali-400 GPU, 1 GB RAM) teyplerde bile sıfır gecikmeyle çalışan ultra hafif arayüz.
-   * **Sıfır İnternet İzni:** Dışarıya tek bir bayt dahi veri göndermez, tam gizlilik ve güvenlik sağlar.
-2. **Bağımsız Komut Satırı Araçları (`scripts/`):**
-   * `scripts/fake_hunter.sh`: Cihazın kendi terminalinden veya harici USB bellekten doğrudan çalışan kurulumsuz betik.
-   * `scripts/fake_hunter_adb.sh`: Bilgisayardan USB/Wi-Fi ADB üzerinden tek komutla teftiş yapan betik.
+### Fake Hunter Nasıl Çalışır?
+* **Çekirdek Düzeyinde Bellek Okuma:** Android API'lerinin yanıltıcı çağrılarını atlar; doğrudan Linux çekirdeğinin `/proc/meminfo` dökümünden gerçek fiziksel RAM (`MemTotal`) ile takas alanını (`SwapTotal`) ayrıştırır.
+* **Canlı Çekirdek Uyandırma Testi:** Çekirdeklere anlık hesaplama yükü bindirir ve `/sys/devices/system/cpu/cpu*/cpufreq/` düğümlerinden gerçek frekans üretip üretmediklerini doğrular.
+* **Fiziksel Flash Sektör Taraması:** `/sys/block/*/size` üzerinden blok aygıtlarının raw sektör sayısını (512 bayt) okuyarak depolama silikonunun gerçek donanım sınırını belirler.
+* **Fiziksel Yazma ve Bütünlük Doğrulaması:** Disk üzerine 100 MB'lık rastgele veri blokları yazar, ardından geri okuyarak sağlama toplamını doğrular. Sahte flash çipler bu aşamada doğrudan bozulma hatası verir.
+* **Adli Teftiş ZIP Paketi (SAF):** Tek tıkla 11 teşhis dosyasını (`getprop`, `cpuinfo`, `meminfo`, `partitions`, `mounts`, `logcat`, `dmesg`, vb.) bir araya getirerek USB belleğe `.zip` olarak dışa aktarır.
+* **Çevrimdışı QR Kod Özeti:** USB veya kablo bulunmayan durumlarda rapor özetini ekranda QR koda dökerek telefon kamerasıyla alınmasını sağlar.
 
 ---
 
 ## 🇬🇧 English Description
 
-### The Problem: Hardware Fraud
-Budget Android Head Units and TV streaming boxes from various marketplaces frequently deceive buyers with spoofed firmware:
-* **Spoofed 8 Cores:** Hardware is physically a 4-core CPU, but ROM is hacked to report 8 cores. The fake cores generate 0 Hz.
-* **Inflated RAM:** Physical RAM is only 1GB–2GB, but system Swap/ZRAM space is added to the count to falsely claim "8GB RAM".
-* **Fake Android Version:** The OS reports "Android 13/14" in system settings while kernel API level is actually Android 8.1 or 10.
+### The Problem: Systematic Hardware Fraud
+Budget Android head units, car multimedia replacements, and TV streaming boxes from online marketplaces frequently employ deceptive firmware modifications:
+1. **Spoofed Octa-Core:** Entry-level quad-core chips report 8 cores in system files; the phantom cores generate 0 Hz clock frequency.
+2. **RAM Inflation via Swap:** Physical 2GB or 4GB RAM is artificially combined with Swap/ZRAM allocation to market the device as "6GB" or "8GB RAM".
+3. **Spoofed Flash Capacity:** Low-cost 16GB/32GB NAND flash chips are modified at partition boundaries to report 64GB or 128GB, silently corrupting data once real capacity is exceeded.
+4. **Android Version Spoofing:** Marketing labels and UI strings display "Android 13/14", while underlying kernel API level is actually Android 8.1 (API 27) or Android 10 (API 29).
 
-### How Fake Hunter Detects Fraud
-1. **Direct Memory Parsing:** Reads `/proc/meminfo` directly, calculating real physical RAM (`MemTotal`) vs Swap (`SwapTotal`).
-2. **Core Frequency Auditing:** Scans `/sys/devices/system/cpu/` and `/proc/cpuinfo` to verify active clock frequencies per core.
-3. **Storage Sizing:** Queries actual partition boundaries on `/data` using `StatFs`.
-4. **Physical Storage Verification Test:** Detects spoofed flash storage (e.g. 16GB chips flashed to report 64GB/128GB) by writing pseudo-random blocks, verifying integrity with CRC32, and benchmarking read/write throughput.
-5. **Optional Deep Root & Kernel Audit:** Inspects raw kernel block partitions (`/proc/partitions`), dmesg logs, and SELinux state when root access is present.
-6. **Chipset Signature Database:** Identifies notorious counterfeit chips (AC8227L, Allwinner T3, MT6580, Rockchip RK3128/3228).
-7. **API Level Discrepancy:** Verifies reported OS release strings against actual `Build.VERSION.SDK_INT`.
+### How Fake Hunter Detects Counterfeits
+* **Direct Kernel Memory Parsing:** Bypasses framework-level queries to parse `/proc/meminfo` directly, isolating physical RAM (`MemTotal`) from Swap (`SwapTotal`).
+* **Active CPU Core Benchmarking:** Applies a micro-workload across all reported cores and inspects `/sys/devices/system/cpu/` nodes to confirm genuine active clock frequencies.
+* **Hardware Sector Capacity Detection:** Inspects `/sys/block/*/size` sector counts (512-byte sectors) to determine true physical eMMC/UFS silicon capacity before partition inflation.
+* **Physical Flash Integrity Testing:** Performs sustained write/read cycles with randomized blocks, verifies integrity via checksums, and exposes fake NAND memory through readback corruption.
+* **Forensic ZIP Evidence Export (SAF):** One-click packaging of 11 low-level diagnostic dumps into a standardized forensic archive.
+* **On-Screen Offline QR Code:** Generates offline ZXing QR codes of the inspection verdict for instant smartphone camera scanning.
 
 ---
 
@@ -60,12 +83,12 @@ Budget Android Head Units and TV streaming boxes from various marketplaces frequ
 
 ### Yöntem 1: Android Uygulaması ile Teftiş (Tavsiye Edilen - Bilgisayar Gerektirmez)
 [GitHub Releases](https://github.com/gokcank/Fake-Hunter/releases) sayfasından en güncel APK'yı indirin veya bir USB belleğe kopyalayarak cihaza takın:
-* **Modern Varyant (`FakeHunter-v1.1.0-Modern.apk`):** Jetpack Compose ile geliştirilmiş modern, reaktif arayüz. Güncel teypler, tabletler ve telefonlar için önerilir.
-* **Klasik Varyant (`FakeHunter-v1.1.0-Classic.apk`):** Eski Android sürümleri (Android 5+) ve zayıf donanımlı teypler (Mali-400 GPU, 1-2 GB RAM) için optimize edilmiş ultra hafif XML Views arayüzü.
+* **Modern Varyant (`FakeHunter-v1.1.0-Modern.apk`):** Jetpack Compose ile geliştirilmiş modern arayüz. 1024x600 ve üzeri güncel teypler, tabletler ve telefonlar için önerilir.
+* **Klasik Varyant (`FakeHunter-v1.1.0-Classic.apk`):** Eski Android sürümleri (Android 5+) ve zayıf donanımlı teypler (Mali-400 GPU, 1-2 GB RAM) için optimize edilmiş hafif XML Views arayüzü.
 
 **Teftiş Süreci ve Özellikler:**
-1. **Otomatik Hepsi-Bir-Arada Teftiş:** Uygulama açıldığı anda veya *Tekrar Teftiş Et* butonuna basıldığında RAM, SWAP şişirmesi, CPU çekirdek uyandırma testi, `/sys/block/*/size` fiziksel flash çip boyutu ve 100 MB rastgele veri yazma/okuma doğrulama testini sırayla otomatik icra eder.
-2. **Adli Teftiş ZIP Arşivi (SAF):** *Raporu Kaydet (ZIP)* butonuna dokunarak mevcut teftiş raporunu ve 11 ayrı sistem dökümünü (`getprop`, `cpuinfo`, `meminfo`, `partitions`, `mounts`, `logcat`, `dmesg`, vb.) doğrudan USB belleğe veya yerel hafızaya `.zip` arşivi olarak kaydedebilirsiniz.
+1. **Otomatik Hepsi-Bir-Arada Teftiş:** Uygulama açıldığı anda veya *Tekrar Teftiş Et* butonuna basıldığında RAM, SWAP şişirmesi, CPU çekirdek uyandırma testi, `/sys/block/*/size` fiziksel flash çip boyutu ve 100 MB veri yazma/okuma testini otomatik yürütür.
+2. **Adli Teftiş ZIP Arşivi (SAF):** *Raporu Kaydet (ZIP)* butonuna dokunarak mevcut teftiş raporunu ve 11 ayrı sistem dökümünü (`getprop`, `cpuinfo`, `meminfo`, `partitions`, `mounts`, `logcat`, `dmesg`, vb.) doğrudan USB belleğe `.zip` arşivi olarak kaydedebilirsiniz.
 3. **Ekranda Çevrimdışı QR Kod:** *QR Kod* butonuna basarak teftiş özetini ekranda QR koda dökebilir, telefonunuzun kamerasıyla saniyeler içinde tarayarak yanınıza alabilirsiniz.
 4. **Ayarlar:** Uygulama dilini (Türkçe / English / Sistem Varsayılanı), otomatik root yetkisi isteme tercihini ve depolama test blok boyutunu (100 MB, 250 MB, 500 MB) ayarlayabilirsiniz.
 
@@ -100,12 +123,12 @@ sh fake_hunter.sh --lang tr --wake --root --storage-test 100 --output rapor.txt 
 
 ### Option 1: Android Application (Recommended - No PC Required)
 Download the latest release APK from [GitHub Releases](https://github.com/gokcank/Fake-Hunter/releases) or transfer it via a USB flash drive:
-* **Modern Flavor (`FakeHunter-v1.1.0-Modern.apk`):** Built with Jetpack Compose. Responsive, modern UI designed for high-resolution multimedia screens, tablets, and phones.
+* **Modern Flavor (`FakeHunter-v1.1.0-Modern.apk`):** Built with Jetpack Compose. Responsive, modern UI designed for multimedia screens, tablets, and phones.
 * **Classic Flavor (`FakeHunter-v1.1.0-Classic.apk`):** Ultra lightweight XML Views implementation optimized for entry-level automotive head units (Mali-400 GPU, 1-2 GB RAM, Android 5.0+).
 
 **Audit Workflow & Features:**
-1. **All-in-One Automated Audit:** On startup or by clicking *Re-inspect*, the app automatically runs physical RAM analysis, Swap inflation detection, CPU core wake-up benchmarking, `/sys/block/*/size` physical flash silicon capacity detection, and 100 MB physical storage verification.
-2. **Forensic Evidence ZIP Export (SAF):** Click *Save Evidence (ZIP)* to package the on-screen audit results together with 11 low-level diagnostic dumps (`getprop`, `cpuinfo`, `meminfo`, `partitions`, `mounts`, `logcat`, `dmesg`, etc.) into a forensic `.zip` archive via Android's Storage Access Framework file picker.
+1. **All-in-One Automated Audit:** On startup or by clicking *Re-inspect*, the app automatically runs physical RAM analysis, Swap inflation detection, CPU core wake-up benchmarking, raw flash sector capacity detection, and 100 MB physical storage verification.
+2. **Forensic Evidence ZIP Export (SAF):** Click *Save Evidence (ZIP)* to package on-screen audit results together with 11 low-level diagnostic dumps into a forensic `.zip` archive via Android's Storage Access Framework file picker.
 3. **On-Screen QR Code:** Click *QR Code* to render an offline ZXing QR code containing the full audit summary, ready for instant camera capture with your phone.
 4. **Settings Dialog:** Toggle language dynamically (Türkçe / English / System Default), enable/disable automatic root escalation, and customize the physical storage test block size (100 MB, 250 MB, 500 MB).
 
@@ -124,7 +147,7 @@ Connect your Android target via USB debugging or Wireless ADB:
 ```
 
 ### Option 3: Standalone On-Device Shell Script
-If the device has Termux or Terminal Emulator installed, run `scripts/fake_hunter.sh` directly without installing any APK:
+Run `scripts/fake_hunter.sh` directly on device without installing any APK:
 
 ```sh
 # Basic run
@@ -136,13 +159,21 @@ sh fake_hunter.sh --lang en --wake --root --storage-test 100 --output report.txt
 
 ---
 
-## 🔒 Privacy & Security
+## 🛡️ Gizlilik ve Güvenlik / Privacy & Security
 
-* **Zero Internet Permissions:** `android.permission.INTERNET` is not included in the manifest.
-* **Crash-Proof Design:** Employs defensive `safeRun` handlers and optional hardware features (`uses-feature required="false"`), preventing crashes on stripped-down automotive ROMs.
+* **Sıfır İnternet İzni Politikası:** `AndroidManifest.xml` içinde `android.permission.INTERNET` izni bulunmaz. Uygulama hiçbir sunucuyla iletişim kurmaz, telemetri veya analitik toplamaz.
+* **Defansif Çekirdek İletişimi:** Tüm donanım okumaları `safeRun` korumalı bloklarıyla sarılmıştır. Kırpılmış, eksik veya alışılmadık otomotiv ROM'larında çökme yapmaz.
+* **Açık Kaynak & Şeffaf:** Kodların tamamı açık kaynaktır; teftiş edilen kanıtlar kullanıcı kontrolünde sadece yerel cihaza veya USB'ye kaydedilir.
 
 ---
 
-## 📄 License
+## 📋 Sürüm Geçmişi / Changelog
 
-This project is licensed under the [MIT License](LICENSE).
+Tüm sürümlere ait detaylı değişiklikler ve teknik notlar için:
+👉 **[RELEASE_NOTES.md](RELEASE_NOTES.md)**
+
+---
+
+## 📄 Lisans / License
+
+Bu proje [MIT Lisansı](LICENSE) kapsamında açık kaynak olarak sunulmaktadır.

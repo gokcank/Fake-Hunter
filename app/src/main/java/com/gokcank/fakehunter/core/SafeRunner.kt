@@ -9,8 +9,14 @@ import android.util.Log
 inline fun <T> safeRun(tag: String = "FakeHunter", default: T, block: () -> T): T {
     return try {
         block()
-    } catch (t: Throwable) {
-        Log.w(tag, "SafeRun caught an exception: ${t.message}", t)
+    } catch (e: java.util.concurrent.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        try {
+            Log.w(tag, "SafeRun caught an exception: ${e.message}", e)
+        } catch (_: RuntimeException) {
+            // Allow execution in plain JVM unit tests where android.util.Log is not mocked
+        }
         default
     }
 }

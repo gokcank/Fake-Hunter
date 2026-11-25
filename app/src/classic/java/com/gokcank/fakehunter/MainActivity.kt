@@ -337,22 +337,40 @@ class MainActivity : AppCompatActivity() {
         // RAM
         binding.tvRamPhysical.text = "Physical RAM: ${report.ram.physicalGbFormatted}"
         binding.tvRamSwap.text = "Swap / ZRAM: ${report.ram.swapGbFormatted}"
-        if (report.ram.isSwapInflated) {
-            binding.tvRamWarning.text = getString(R.string.warn_swap_inflated)
-            binding.tvRamWarning.setTextColor(Color.parseColor("#FF1744"))
-        } else {
-            binding.tvRamWarning.text = "Swap Normal"
-            binding.tvRamWarning.setTextColor(Color.parseColor("#00E676"))
+        when {
+            report.ram.isRamSpoofed -> {
+                binding.tvRamWarning.text = getString(R.string.warn_ram_spoofed)
+                binding.tvRamWarning.setTextColor(Color.parseColor("#FF1744"))
+            }
+            report.ram.isSwapInflated -> {
+                binding.tvRamWarning.text = getString(R.string.warn_swap_inflated)
+                binding.tvRamWarning.setTextColor(Color.parseColor("#FFD600"))
+            }
+            report.ram.hasVirtualRamNotice -> {
+                binding.tvRamWarning.text = getString(R.string.ram_virtual_active)
+                binding.tvRamWarning.setTextColor(Color.parseColor("#00E5FF"))
+            }
+            else -> {
+                binding.tvRamWarning.text = getString(R.string.ram_swap_normal)
+                binding.tvRamWarning.setTextColor(Color.parseColor("#00E676"))
+            }
         }
 
         // CPU
         binding.tvCpuCores.text = "Reported: ${report.cpu.reportedCores} | Active: ${report.cpu.activeCores}"
-        if (report.cpu.isFakeCoresDetected) {
-            binding.tvCpuWarning.text = getString(R.string.warn_cores_fake)
-            binding.tvCpuWarning.setTextColor(Color.parseColor("#FF1744"))
-        } else {
-            binding.tvCpuWarning.text = "All reported cores verified"
-            binding.tvCpuWarning.setTextColor(Color.parseColor("#00E676"))
+        when {
+            !report.cpu.frequenciesReadable -> {
+                binding.tvCpuWarning.text = getString(R.string.cpu_freq_unreadable)
+                binding.tvCpuWarning.setTextColor(Color.parseColor("#FFD600"))
+            }
+            report.cpu.isFakeCoresDetected -> {
+                binding.tvCpuWarning.text = getString(R.string.warn_cores_fake)
+                binding.tvCpuWarning.setTextColor(Color.parseColor("#FF1744"))
+            }
+            else -> {
+                binding.tvCpuWarning.text = getString(R.string.cpu_cores_verified)
+                binding.tvCpuWarning.setTextColor(Color.parseColor("#00E676"))
+            }
         }
         if (report.cpu.wakeTestPerformed) {
             binding.tvCpuWake.visibility = View.VISIBLE
@@ -369,6 +387,12 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.tvStorageFlash.visibility = View.VISIBLE
             binding.tvStorageFlash.text = getString(R.string.metric_flash_unreadable)
+        }
+        if (report.storage.externalChips.isNotEmpty()) {
+            binding.tvStorageExternal.visibility = View.VISIBLE
+            binding.tvStorageExternal.text = getString(R.string.metric_external_storage, report.storage.externalStorageGbFormatted)
+        } else {
+            binding.tvStorageExternal.visibility = View.GONE
         }
 
         // Root Security
@@ -405,10 +429,20 @@ class MainActivity : AppCompatActivity() {
                 binding.tvStorageTestProgress.visibility = View.GONE
                 binding.tvStorageTestSize.visibility = View.GONE
                 binding.tvStorageTestResult.visibility = View.GONE
+                binding.tvStorageTestCacheNote.visibility = View.GONE
+            }
+            test.hasError -> {
+                binding.tvStorageTestProgress.visibility = View.GONE
+                binding.tvStorageTestSize.visibility = View.GONE
+                binding.tvStorageTestCacheNote.visibility = View.GONE
+                binding.tvStorageTestResult.visibility = View.VISIBLE
+                binding.tvStorageTestResult.setTextColor(Color.parseColor("#FFD600"))
+                binding.tvStorageTestResult.text = getString(R.string.storage_test_error, test.message)
             }
             test.wasSkipped -> {
                 binding.tvStorageTestProgress.visibility = View.GONE
                 binding.tvStorageTestSize.visibility = View.GONE
+                binding.tvStorageTestCacheNote.visibility = View.GONE
                 binding.tvStorageTestResult.visibility = View.VISIBLE
                 binding.tvStorageTestResult.setTextColor(Color.parseColor("#FFD600"))
                 binding.tvStorageTestResult.text = getString(R.string.storage_test_skipped, test.message)
@@ -416,6 +450,7 @@ class MainActivity : AppCompatActivity() {
             test.isCorrupted -> {
                 binding.tvStorageTestProgress.visibility = View.GONE
                 binding.tvStorageTestSize.visibility = View.GONE
+                binding.tvStorageTestCacheNote.visibility = View.GONE
                 binding.tvStorageTestResult.visibility = View.VISIBLE
                 binding.tvStorageTestResult.setTextColor(Color.parseColor("#FF1744"))
                 binding.tvStorageTestResult.text = "${getString(R.string.storage_test_failed)}: ${test.message}"
@@ -427,6 +462,7 @@ class MainActivity : AppCompatActivity() {
                 binding.tvStorageTestResult.visibility = View.VISIBLE
                 binding.tvStorageTestResult.setTextColor(Color.parseColor("#00E676"))
                 binding.tvStorageTestResult.text = getString(R.string.storage_test_passed, test.writeSpeedMbPerSec, test.readSpeedMbPerSec)
+                binding.tvStorageTestCacheNote.visibility = if (test.cacheWarning) View.VISIBLE else View.GONE
             }
         }
 
@@ -451,10 +487,10 @@ class MainActivity : AppCompatActivity() {
                 setPadding(p, p, p, p)
             }
 
-            val issueColor = if (issue.severity == IssueSeverity.FAKE) {
-                Color.parseColor("#FF1744")
-            } else {
-                Color.parseColor("#FFD600")
+            val issueColor = when (issue.severity) {
+                IssueSeverity.FAKE -> Color.parseColor("#FF1744")
+                IssueSeverity.WARNING -> Color.parseColor("#FFD600")
+                IssueSeverity.INFO -> Color.parseColor("#00E5FF")
             }
 
             val tvTitle = TextView(this).apply {

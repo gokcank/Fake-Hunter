@@ -1,5 +1,6 @@
 package com.gokcank.fakehunter.core.detector
 
+import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.os.Environment
@@ -9,11 +10,22 @@ import com.gokcank.fakehunter.core.root.RootHelper
 import com.gokcank.fakehunter.core.safeRun
 import com.gokcank.fakehunter.core.storage.StorageTester
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 object HardwareDetector {
 
     /** Phases reported to the UI while the full audit chain runs. */
     enum class Phase { SYSTEM, CPU_WAKE, ROOT, FLASH, STORAGE_TEST, DONE }
+
+    private val NON_FLASH_PREFIXES = listOf("loop", "ram", "zram", "dm-", "md", "sr", "nbd", "vnd", "fd")
+
+    private val REGEX_AC8227 = Regex("(^|[^a-z0-9])(ac8227l?|mt8227l?|8227l)([^a-z0-9]|$)")
+    private val REGEX_AC8227_MODEL = Regex("(^|[^a-z0-9])(ac8227l?|mt8227l?)([^a-z0-9]|$)")
+    private val REGEX_ALLWINNER_T3 = Regex("(^|[^a-z0-9])(sun8i|sun8iw[0-9]+p[0-9]+|allwinner[_\\s-]?t3|t3[_\\s-]?p[0-9]+)([^a-z0-9]|$)")
+    private val REGEX_MT6580 = Regex("(^|[^a-z0-9])mt6580([^a-z0-9]|$)")
+    private val REGEX_ROCKCHIP_LEGACY = Regex("(^|[^a-z0-9])rk3[12]2[89]([^a-z0-9]|$)")
 
     /**
      * Runs the full audit chain: identity, RAM, CPU (with wake test), root,
@@ -29,7 +41,7 @@ object HardwareDetector {
 
         onProgress(Phase.SYSTEM, 0, "")
         val systemInfo = detectSystemInfo()
-        val ramInfo = detectRamInfo(issues)
+        val ramInfo = detectRamInfo(context, systemInfo.actualSdkLevel, issues)
 
         onProgress(Phase.CPU_WAKE, 5, "")
         val cpuInfo = detectCpuInfo(issues, options.wakeTest)
@@ -43,7 +55,11 @@ object HardwareDetector {
         var storageTest: StorageTestResult? = null
         if (options.storageTestMb > 0) {
             onProgress(Phase.STORAGE_TEST, 35, "")
-            storageTest = StorageTester.runVerificationTest(context, options.storageTestMb) { pct, msg ->
+            storageTest = StorageTester.runVerificationTest(
+                context = context,
+                testMb = options.storageTestMb,
+                physicalRamMb = ramInfo.physicalMb
+            ) { pct, msg ->
                 onProgress(Phase.STORAGE_TEST, 35 + (pct * 65) / 100, msg)
             }
             if (storageTest.isCorrupted) {
@@ -54,11 +70,19 @@ object HardwareDetector {
                         description = storageTest.message
                     )
                 )
+            } else if (storageTest.hasError) {
+                issues.add(
+                    AuditIssue(
+                        severity = IssueSeverity.WARNING,
+                        title = "Storage Test Could Not Complete",
+                        description = storageTest.message
+                    )
+                )
             }
         }
 
-        checkKnownFraudSignatures(systemInfo, issues)
-        checkAndroidVersionSpoofing(systemInfo, issues)
+        evaluateKnownFraudSignatures(systemInfo, ramInfo, cpuInfo, issues)
+        evaluateAndroidVersionSpoofing(systemInfo, issues)
 
         val verdict = when {
             issues.any { it.severity == IssueSeverity.FAKE } -> Verdict.FAKE_DETECTED
@@ -92,9 +116,14 @@ object HardwareDetector {
         )
     }
 
-    private fun detectRamInfo(issues: MutableList<AuditIssue>): RamInfo {
+    private fun detectRamInfo(
+        context: Context,
+        actualSdkLevel: Int,
+        issues: MutableList<AuditIssue>
+    ): RamInfo {
         var memTotalKb = 0L
         var swapTotalKb = 0L
+        var swapBackedByZram = false
 
         safeRun("RamInfo", Unit) {
             val meminfoFile = File("/proc/meminfo")
@@ -109,29 +138,94 @@ object HardwareDetector {
             }
         }
 
-        val physicalMb = memTotalKb / 1024
-        val swapMb = swapTotalKb / 1024
+        safeRun("SwapInfo", Unit) {
+            val swapsFile = File("/proc/swaps")
+            if (swapsFile.exists()) {
+                val lines = swapsFile.readLines().drop(1).filter { it.isNotBlank() }
+                if (lines.isNotEmpty() && lines.all { it.contains("zram", ignoreCase = true) }) {
+                    swapBackedByZram = true
+                }
+            }
+        }
 
+        val reportedTotalMb = safeRun("ActivityManagerRam", 0L) {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            if (am != null) {
+                val memInfo = ActivityManager.MemoryInfo()
+                am.getMemoryInfo(memInfo)
+                memInfo.totalMem / (1024L * 1024L)
+            } else 0L
+        }
+
+        return evaluateRam(
+            physicalMb = memTotalKb / 1024L,
+            swapMb = swapTotalKb / 1024L,
+            reportedTotalMb = reportedTotalMb,
+            actualSdkLevel = actualSdkLevel,
+            swapBackedByZram = swapBackedByZram,
+            issues = issues
+        )
+    }
+
+    internal fun evaluateRam(
+        physicalMb: Long,
+        swapMb: Long,
+        reportedTotalMb: Long,
+        actualSdkLevel: Int,
+        swapBackedByZram: Boolean,
+        issues: MutableList<AuditIssue>
+    ): RamInfo {
+        var isRamSpoofed = false
         var isSwapInflated = false
-        // Swap inflation heuristic
-        if (swapMb >= 3000 && physicalMb <= 4200) {
+        var hasVirtualRamNotice = false
+
+        // 1. Direct Android Framework vs Linux Kernel RAM contradiction -> FAKE
+        if (reportedTotalMb > 0L && physicalMb > 0L && reportedTotalMb > physicalMb + (physicalMb / 4) + 512L) {
+            isRamSpoofed = true
             isSwapInflated = true
             issues.add(
                 AuditIssue(
                     severity = IssueSeverity.FAKE,
-                    title = "Swap Memory Inflation",
-                    description = "Physical RAM (${physicalMb}MB) is artificially combined with Swap space (${swapMb}MB) to market the device as higher RAM."
+                    title = "RAM Size Spoofed",
+                    description = "Android reports ${reportedTotalMb}MB total RAM, but Linux kernel physical RAM is only ${physicalMb}MB."
                 )
             )
-        } else if (swapMb > 0 && physicalMb > 0) {
-            val ratio = (swapMb * 100) / physicalMb
-            if (ratio > 85) {
+        }
+
+        // 2. Swap / Virtual RAM evaluation (distinguishes Android 11+ OEM RAM Plus/ZRAM from legacy head unit inflation)
+        if (!isRamSpoofed && swapMb > 0L && physicalMb > 0L) {
+            val ratio = (swapMb * 100L) / physicalMb
+            val isVeryHighSwap = ratio > 100L || (swapMb >= 3000L && physicalMb <= 4200L)
+
+            if (isVeryHighSwap) {
+                if (actualSdkLevel >= 30 && swapBackedByZram) {
+                    // Android 11+ standard OEM ZRAM / RAM Plus expansion — inform without falsely calling it FAKE
+                    hasVirtualRamNotice = true
+                    issues.add(
+                        AuditIssue(
+                            severity = IssueSeverity.INFO,
+                            title = "Virtual RAM / ZRAM Expansion Active",
+                            description = "Large compressed ZRAM swap (${swapMb}MB, ${ratio}% of ${physicalMb}MB physical RAM) is common on Android 11+ devices. Verify seller claims against the physical RAM figure."
+                        )
+                    )
+                } else {
+                    // Legacy Android <= 10 head units or non-ZRAM disk swap inflation
+                    isSwapInflated = true
+                    issues.add(
+                        AuditIssue(
+                            severity = IssueSeverity.WARNING,
+                            title = "High Swap Allocation",
+                            description = "Swap memory (${swapMb}MB) is ${ratio}% of physical RAM (${physicalMb}MB). Budget head units often combine swap with physical RAM to advertise inflated RAM."
+                        )
+                    )
+                }
+            } else if (ratio > 85L && actualSdkLevel < 30 && !swapBackedByZram) {
                 isSwapInflated = true
                 issues.add(
                     AuditIssue(
                         severity = IssueSeverity.WARNING,
-                        title = "High Swap Allocation",
-                        description = "Swap memory is unusually large (${ratio}% of physical RAM), which may mislead standard RAM queries."
+                        title = "Elevated Disk Swap Allocation",
+                        description = "Disk-backed swap space is ${ratio}% of physical RAM (${swapMb}MB vs ${physicalMb}MB)."
                     )
                 )
             }
@@ -140,29 +234,61 @@ object HardwareDetector {
         return RamInfo(
             physicalMb = physicalMb,
             swapMb = swapMb,
-            isSwapInflated = isSwapInflated
+            isSwapInflated = isSwapInflated,
+            reportedTotalMb = reportedTotalMb,
+            isRamSpoofed = isRamSpoofed,
+            swapBackedByZram = swapBackedByZram,
+            hasVirtualRamNotice = hasVirtualRamNotice
         )
     }
 
     private fun detectCpuInfo(issues: MutableList<AuditIssue>, wakeTest: Boolean): CpuInfo {
-        var reportedCores = Runtime.getRuntime().availableProcessors()
+        val reportedCores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
         val details = mutableListOf<CoreDetail>()
-        var activeCores = 0
 
-        // Optionally wake cores with brief calculation
         if (wakeTest) {
             safeRun("CpuWake", Unit) {
-                val threads = (1..reportedCores).map {
-                    Thread {
-                        var x = 0L
-                        for (i in 0..100000L) { x += i }
-                    }.apply { start() }
+                val keepSpinning = AtomicBoolean(true)
+                val startedLatch = CountDownLatch(reportedCores)
+                val spinDeadlineNs = System.nanoTime() + 250_000_000L // Hard 250ms cap
+                val threads = (1..reportedCores).map { workerIdx ->
+                    Thread({
+                        startedLatch.countDown()
+                        var acc = workerIdx.toLong() + 1L
+                        while (keepSpinning.get() && System.nanoTime() < spinDeadlineNs) {
+                            acc = acc * 6364136223846793005L + 1442695040888963407L
+                        }
+                        if (acc == 42L) Thread.yield()
+                    }, "FakeHunter-CpuWake-$workerIdx").apply {
+                        isDaemon = true
+                        start()
+                    }
                 }
-                threads.forEach { it.join(500) }
+                try {
+                    startedLatch.await(50, TimeUnit.MILLISECONDS)
+                    Thread.sleep(90)
+                    details.addAll(sampleCoreDetails(reportedCores))
+                } finally {
+                    keepSpinning.set(false)
+                    threads.forEach { t -> safeRun("CpuWakeJoin", Unit) { t.join(150) } }
+                }
             }
         }
 
-        // Check each core sysfs
+        if (details.isEmpty()) {
+            details.addAll(sampleCoreDetails(reportedCores))
+        }
+
+        return evaluateCpu(
+            reportedCores = reportedCores,
+            details = details,
+            wakeTestPerformed = wakeTest,
+            issues = issues
+        )
+    }
+
+    private fun sampleCoreDetails(reportedCores: Int): List<CoreDetail> {
+        val details = mutableListOf<CoreDetail>()
         for (idx in 0 until reportedCores) {
             val coreDir = File("/sys/devices/system/cpu/cpu$idx")
             var isOnline = true
@@ -193,28 +319,43 @@ object HardwareDetector {
                 if (curFreq == 0L) {
                     val mhz = getCpuInfoMhzForCore(idx)
                     if (mhz > 0) {
-                        curFreq = mhz * 1000
+                        curFreq = mhz * 1000L
                         if (maxFreq == 0L) maxFreq = curFreq
                     }
                 }
-            }
-
-            if (isOnline && curFreq > 0) {
-                activeCores++
             }
 
             details.add(
                 CoreDetail(
                     index = idx,
                     isOnline = isOnline,
-                    currentFreqMhz = curFreq / 1000,
-                    maxFreqMhz = maxFreq / 1000
+                    currentFreqMhz = curFreq / 1000L,
+                    maxFreqMhz = maxFreq / 1000L
                 )
             )
         }
+        return details
+    }
 
-        val isFakeCoresDetected = reportedCores > activeCores && activeCores > 0
-        if (isFakeCoresDetected) {
+    internal fun evaluateCpu(
+        reportedCores: Int,
+        details: List<CoreDetail>,
+        wakeTestPerformed: Boolean,
+        issues: MutableList<AuditIssue>
+    ): CpuInfo {
+        val activeCores = details.count { it.isOnline && it.currentFreqMhz > 0L }
+        val frequenciesReadable = details.any { it.currentFreqMhz > 0L || it.maxFreqMhz > 0L }
+
+        val isFakeCoresDetected = if (!frequenciesReadable) {
+            issues.add(
+                AuditIssue(
+                    severity = IssueSeverity.INFO,
+                    title = "CPU Frequencies Restricted",
+                    description = "System security restrictions prevented reading core clock frequencies; reported $reportedCores cores could not be verified by active frequency."
+                )
+            )
+            false
+        } else if (reportedCores > activeCores) {
             issues.add(
                 AuditIssue(
                     severity = IssueSeverity.FAKE,
@@ -222,6 +363,9 @@ object HardwareDetector {
                     description = "System reports $reportedCores CPU cores, but only $activeCores generate active clock frequency."
                 )
             )
+            true
+        } else {
+            false
         }
 
         return CpuInfo(
@@ -229,7 +373,8 @@ object HardwareDetector {
             activeCores = activeCores,
             coreDetails = details,
             isFakeCoresDetected = isFakeCoresDetected,
-            wakeTestPerformed = wakeTest
+            wakeTestPerformed = wakeTestPerformed,
+            frequenciesReadable = frequenciesReadable
         )
     }
 
@@ -244,20 +389,20 @@ object HardwareDetector {
             val totalBlocks = stat.blockCountLong
             val freeBlocks = stat.availableBlocksLong
 
-            totalMb = (totalBlocks * blockSize) / (1024 * 1024)
-            freeMb = (freeBlocks * blockSize) / (1024 * 1024)
+            totalMb = (totalBlocks * blockSize) / (1024L * 1024L)
+            freeMb = (freeBlocks * blockSize) / (1024L * 1024L)
         }
 
-        val (chips, complete) = detectFlashChips(useRoot)
+        val (internalChips, externalChips, complete) = detectFlashChips(useRoot)
 
-        // A partition can never be larger than the physical chips it lives on.
-        val physicalMb = chips.sumOf { it.sizeMb }
-        if (complete && physicalMb > 0 && totalMb > physicalMb + physicalMb / 50) {
+        // A /data partition can never exceed the internal physical flash chips it lives on.
+        val physicalMb = internalChips.sumOf { it.sizeMb }
+        if (complete && physicalMb > 0L && totalMb > physicalMb + physicalMb / 50L) {
             issues.add(
                 AuditIssue(
                     severity = IssueSeverity.FAKE,
                     title = "Storage Size Spoofed",
-                    description = "The /data partition reports ${totalMb}MB, but the physical flash chip(s) only hold ${physicalMb}MB."
+                    description = "The /data partition reports ${totalMb}MB, but the internal physical flash chip(s) only hold ${physicalMb}MB."
                 )
             )
         }
@@ -265,20 +410,36 @@ object HardwareDetector {
         return StorageInfo(
             totalDataMb = totalMb,
             freeDataMb = freeMb,
-            flashChips = chips,
-            flashChipsComplete = complete
+            flashChips = internalChips,
+            flashChipsComplete = complete,
+            externalChips = externalChips
         )
     }
 
-    private val NON_FLASH_PREFIXES = listOf("loop", "ram", "zram", "dm-", "md", "sr", "nbd", "vnd", "fd")
+    internal fun isRemovableBlockDevice(
+        name: String,
+        removableFlag: String?,
+        mmcType: String?,
+        canonicalPath: String?
+    ): Boolean {
+        if (removableFlag?.trim() == "1") return true
+        if (name.startsWith("mmcblk") && mmcType?.trim()?.equals("SD", ignoreCase = true) == true) {
+            return true
+        }
+        if (canonicalPath != null && canonicalPath.lowercase().contains("/usb")) {
+            return true
+        }
+        return false
+    }
 
     /**
-     * Reads the raw sector count of every whole block device from /sys/block/<dev>/size
-     * (512-byte sectors). Tries without root first, then with root if granted.
-     * Returns the chips and whether every candidate device could be read.
+     * Reads the raw sector count of whole block devices from /sys/block/<dev>/size
+     * (512-byte sectors), separating removable USB/SD devices from internal flash chips.
+     * Empty removable readers (sectors == 0) are ignored so they never suppress internal checks.
      */
-    private fun detectFlashChips(useRoot: Boolean): Pair<List<FlashChip>, Boolean> {
-        val chips = mutableListOf<FlashChip>()
+    private fun detectFlashChips(useRoot: Boolean): Triple<List<FlashChip>, List<FlashChip>, Boolean> {
+        val internalChips = mutableListOf<FlashChip>()
+        val externalChips = mutableListOf<FlashChip>()
         var complete = true
 
         val names = safeRun("FlashList", emptyList<String>()) {
@@ -296,9 +457,18 @@ object HardwareDetector {
                 !name.contains("boot") && !name.contains("rpmb")
         }.sorted()
 
-        if (candidates.isEmpty()) return Pair(emptyList(), false)
+        if (candidates.isEmpty()) return Triple(emptyList(), emptyList(), false)
 
         for (name in candidates) {
+            val removableFlag = readSysfsFile("/sys/block/$name/removable", useRoot)
+            val mmcType = if (name.startsWith("mmcblk")) {
+                readSysfsFile("/sys/block/$name/device/type", useRoot)
+            } else null
+            val canonicalPath = safeRun("FlashPath", null) {
+                File("/sys/block/$name").canonicalPath
+            }
+            val removable = isRemovableBlockDevice(name, removableFlag, mmcType, canonicalPath)
+
             var viaRoot = false
             var sectors = safeRun("FlashSize", 0L) {
                 File("/sys/block/$name/size").readText().trim().toLongOrNull() ?: 0L
@@ -308,84 +478,150 @@ object HardwareDetector {
                     ?.trim()?.toLongOrNull() ?: 0L
                 viaRoot = sectors > 0L
             }
-            if (sectors > 0L) {
-                chips.add(FlashChip(name = name, sizeMb = (sectors * 512L) / (1024L * 1024L), readViaRoot = viaRoot))
+
+            if (removable) {
+                if (sectors > 0L) {
+                    externalChips.add(
+                        FlashChip(
+                            name = name,
+                            sizeMb = (sectors * 512L) / (1024L * 1024L),
+                            readViaRoot = viaRoot,
+                            isRemovable = true
+                        )
+                    )
+                }
+                // Empty removable card readers / USB slots have size 0 and must not mark internal complete=false
             } else {
-                complete = false
+                if (sectors > 0L) {
+                    internalChips.add(
+                        FlashChip(
+                            name = name,
+                            sizeMb = (sectors * 512L) / (1024L * 1024L),
+                            readViaRoot = viaRoot,
+                            isRemovable = false
+                        )
+                    )
+                } else {
+                    complete = false
+                }
             }
         }
 
-        return Pair(chips, complete && chips.isNotEmpty())
+        return Triple(internalChips, externalChips, complete && internalChips.isNotEmpty())
     }
 
-    private fun checkKnownFraudSignatures(system: SystemInfo, issues: MutableList<AuditIssue>) {
-        val checkStr = "${system.platform}_${system.board}_${system.hardware}_${system.model}".lowercase()
+    private fun readSysfsFile(path: String, useRoot: Boolean): String? {
+        val direct = safeRun("ReadSysfs", null) {
+            val f = File(path)
+            if (f.exists() && f.canRead()) f.readText().trim() else null
+        }
+        if (direct != null) return direct
+        if (useRoot) {
+            return RootHelper.executeRootCommand("cat $path")?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        return null
+    }
+
+    internal fun evaluateKnownFraudSignatures(
+        system: SystemInfo,
+        ram: RamInfo,
+        cpu: CpuInfo,
+        issues: MutableList<AuditIssue>
+    ) {
+        val hwStr = listOf(system.platform, system.board, system.hardware)
+            .joinToString(" ")
+            .lowercase()
+        val modelStr = system.model.lowercase()
+
+        val reportedMajorAndroid = parseMajorVersion(system.reportedRelease) ?: 0
+        val contradictsQuadCoreLegacy = cpu.reportedCores > 4 ||
+            reportedMajorAndroid >= 11 ||
+            ram.physicalMb > 4200L ||
+            ram.reportedTotalMb > 4200L ||
+            ram.isSwapInflated
+
         when {
-            checkStr.contains("8227") -> {
-                issues.add(
-                    AuditIssue(
-                        severity = IssueSeverity.FAKE,
-                        title = "AC8227L Chipset Signature",
-                        description = "AutoChips/MediaTek 32-bit Quad-Core Cortex-A7 chipset detected. Often spoofed as 8-core, Android 13/14 with 8GB RAM."
-                    )
-                )
+            REGEX_AC8227.containsMatchIn(hwStr) || REGEX_AC8227_MODEL.containsMatchIn(modelStr) -> {
+                val severity = if (contradictsQuadCoreLegacy) IssueSeverity.FAKE else IssueSeverity.INFO
+                val desc = if (contradictsQuadCoreLegacy) {
+                    "AutoChips/MediaTek AC8227L (32-bit Quad-Core Cortex-A7) contradicts the reported specs (cores, RAM, or Android version)."
+                } else {
+                    "Legacy AutoChips/MediaTek AC8227L Quad-Core platform identified. Verify seller claims do not advertise 8-core or Android 11+."
+                }
+                issues.add(AuditIssue(severity = severity, title = "AC8227L Chipset Signature", description = desc))
             }
-            checkStr.contains("sun8i") || checkStr.contains("t3") || checkStr.contains("allwinner") -> {
-                issues.add(
-                    AuditIssue(
-                        severity = IssueSeverity.FAKE,
-                        title = "Allwinner T3 Signature",
-                        description = "Allwinner Quad-Core Cortex-A7 platform detected. Frequently marketed as 8-core multimedia head unit."
-                    )
-                )
+            REGEX_ALLWINNER_T3.containsMatchIn(hwStr) -> {
+                val severity = if (contradictsQuadCoreLegacy) IssueSeverity.FAKE else IssueSeverity.INFO
+                val desc = if (contradictsQuadCoreLegacy) {
+                    "Allwinner sun8i/T3 (32-bit Quad-Core Cortex-A7) contradicts the reported specs (cores, RAM, or Android version)."
+                } else {
+                    "Legacy Allwinner sun8i/T3 Quad-Core platform identified. Verify seller claims do not advertise 8-core or Android 11+."
+                }
+                issues.add(AuditIssue(severity = severity, title = "Allwinner T3 / sun8i Signature", description = desc))
             }
-            checkStr.contains("mt6580") -> {
-                issues.add(
-                    AuditIssue(
-                        severity = IssueSeverity.FAKE,
-                        title = "MT6580 Legacy Chipset Signature",
-                        description = "MediaTek MT6580 32-bit Quad-Core CPU (2015 era) detected. Incompatible with advertised modern 8-core claims."
-                    )
-                )
+            REGEX_MT6580.containsMatchIn(hwStr) -> {
+                val severity = if (contradictsQuadCoreLegacy) IssueSeverity.FAKE else IssueSeverity.INFO
+                val desc = if (contradictsQuadCoreLegacy) {
+                    "MediaTek MT6580 (2015 32-bit Quad-Core CPU) contradicts the reported specs (cores, RAM, or Android version)."
+                } else {
+                    "Legacy MediaTek MT6580 Quad-Core platform identified. Verify seller claims do not advertise modern 8-core hardware."
+                }
+                issues.add(AuditIssue(severity = severity, title = "MT6580 Legacy Chipset Signature", description = desc))
             }
-            checkStr.contains("rk3128") || checkStr.contains("rk3228") -> {
-                issues.add(
-                    AuditIssue(
-                        severity = IssueSeverity.WARNING,
-                        title = "Rockchip Legacy Signature",
-                        description = "Entry-level Rockchip Quad-Core chipset detected. Frequently faked as 8-core 4K streaming box."
-                    )
-                )
+            REGEX_ROCKCHIP_LEGACY.containsMatchIn(hwStr) -> {
+                val severity = if (contradictsQuadCoreLegacy) IssueSeverity.FAKE else IssueSeverity.INFO
+                val desc = if (contradictsQuadCoreLegacy) {
+                    "Entry-level Rockchip RK3128/RK3228/RK3229 Quad-Core chipset contradicts the reported specs."
+                } else {
+                    "Entry-level Rockchip Quad-Core platform identified. Frequently resold with inflated specifications."
+                }
+                issues.add(AuditIssue(severity = severity, title = "Rockchip Legacy Signature", description = desc))
             }
         }
     }
 
-    private fun checkAndroidVersionSpoofing(system: SystemInfo, issues: MutableList<AuditIssue>) {
-        val sdk = system.actualSdkLevel
-        val release = system.reportedRelease.trim()
+    internal fun expectedAndroidMajorForSdk(sdk: Int): Int? = when (sdk) {
+        21, 22 -> 5
+        23 -> 6
+        24, 25 -> 7
+        26, 27 -> 8
+        28 -> 9
+        29 -> 10
+        30 -> 11
+        31, 32 -> 12
+        33 -> 13
+        34 -> 14
+        35 -> 15
+        36 -> 16
+        else -> null
+    }
 
-        if (sdk in 1..27) { // Android 8.1 or older
-            val major = release.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
-            if (major >= 9) {
-                issues.add(
-                    AuditIssue(
-                        severity = IssueSeverity.FAKE,
-                        title = "Android Version Spoofed",
-                        description = "Reported Android $release contradicts the actual kernel API level $sdk (Android 8.1 Oreo or older)."
-                    )
+    internal fun parseMajorVersion(release: String): Int? {
+        val digits = release.trim().takeWhile { it.isDigit() }
+        return digits.toIntOrNull()
+    }
+
+    internal fun evaluateAndroidVersionSpoofing(system: SystemInfo, issues: MutableList<AuditIssue>) {
+        val sdk = system.actualSdkLevel
+        val major = parseMajorVersion(system.reportedRelease) ?: return
+
+        val expectedMajor = expectedAndroidMajorForSdk(sdk)
+        if (expectedMajor != null && major > expectedMajor) {
+            issues.add(
+                AuditIssue(
+                    severity = IssueSeverity.FAKE,
+                    title = "Android Version Spoofed",
+                    description = "Reported Android ${system.reportedRelease} contradicts the actual kernel API level $sdk (Android $expectedMajor)."
                 )
-            }
-        } else if (sdk in 28..29) { // Android 9 - 10
-            val major = release.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
-            if (major >= 12) {
-                issues.add(
-                    AuditIssue(
-                        severity = IssueSeverity.FAKE,
-                        title = "Android Version Spoofed",
-                        description = "Reported Android $release contradicts the actual kernel API level $sdk (Android 10 Q or older)."
-                    )
+            )
+        } else if (sdk in 1..20 && major >= 5) {
+            issues.add(
+                AuditIssue(
+                    severity = IssueSeverity.FAKE,
+                    title = "Android Version Spoofed",
+                    description = "Reported Android ${system.reportedRelease} contradicts the actual legacy kernel API level $sdk."
                 )
-            }
+            )
         }
     }
 

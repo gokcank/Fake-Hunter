@@ -39,13 +39,20 @@ data class SystemInfo(
 data class RamInfo(
     val physicalMb: Long,
     val swapMb: Long,
-    val isSwapInflated: Boolean
+    val isSwapInflated: Boolean,
+    val reportedTotalMb: Long = 0L,
+    val isRamSpoofed: Boolean = false,
+    val swapBackedByZram: Boolean = false,
+    val hasVirtualRamNotice: Boolean = false
 ) {
     val physicalGbFormatted: String
         get() = formatGb(physicalMb)
 
     val swapGbFormatted: String
         get() = formatGb(swapMb)
+
+    val reportedTotalGbFormatted: String
+        get() = formatGb(reportedTotalMb)
 }
 
 data class CoreDetail(
@@ -60,14 +67,16 @@ data class CpuInfo(
     val activeCores: Int,
     val coreDetails: List<CoreDetail>,
     val isFakeCoresDetected: Boolean,
-    val wakeTestPerformed: Boolean = false
+    val wakeTestPerformed: Boolean = false,
+    val frequenciesReadable: Boolean = true
 )
 
-/** A whole physical block device (eMMC / UFS / NAND / virtio) as seen by the kernel. */
+/** A whole physical block device (eMMC / UFS / NAND / virtio / removable USB or SD) as seen by the kernel. */
 data class FlashChip(
     val name: String,
     val sizeMb: Long,
-    val readViaRoot: Boolean
+    val readViaRoot: Boolean,
+    val isRemovable: Boolean = false
 ) {
     val sizeGbFormatted: String
         get() = formatGb(sizeMb)
@@ -77,7 +86,8 @@ data class StorageInfo(
     val totalDataMb: Long,
     val freeDataMb: Long,
     val flashChips: List<FlashChip> = emptyList(),
-    val flashChipsComplete: Boolean = false
+    val flashChipsComplete: Boolean = false,
+    val externalChips: List<FlashChip> = emptyList()
 ) {
     val totalDataGbFormatted: String
         get() = formatGb(totalDataMb)
@@ -90,6 +100,12 @@ data class StorageInfo(
 
     val physicalFlashGbFormatted: String
         get() = formatGb(physicalFlashMb)
+
+    val externalStorageMb: Long
+        get() = externalChips.sumOf { it.sizeMb }
+
+    val externalStorageGbFormatted: String
+        get() = formatGb(externalStorageMb)
 }
 
 data class RootInfo(
@@ -106,10 +122,12 @@ data class StorageTestResult(
     val writeSpeedMbPerSec: Double,
     val readSpeedMbPerSec: Double,
     val isCorrupted: Boolean,
-    val message: String
+    val message: String,
+    val hasError: Boolean = false,
+    val cacheWarning: Boolean = false
 ) {
     val wasSkipped: Boolean
-        get() = testedMb == 0 && !isCorrupted
+        get() = testedMb == 0 && !isCorrupted && !hasError
 }
 
 data class AuditReport(
@@ -137,10 +155,13 @@ data class AuditReport(
         sb.appendLine()
         sb.appendLine("[Memory]")
         sb.appendLine("Physical RAM: ${ram.physicalGbFormatted} (${ram.physicalMb} MB)")
-        sb.appendLine("Swap / ZRAM: ${ram.swapGbFormatted} (${ram.swapMb} MB) | Inflated: ${ram.isSwapInflated}")
+        if (ram.reportedTotalMb > 0) {
+            sb.appendLine("Framework Reported RAM: ${ram.reportedTotalGbFormatted} (${ram.reportedTotalMb} MB) | Spoofed: ${ram.isRamSpoofed}")
+        }
+        sb.appendLine("Swap / ZRAM: ${ram.swapGbFormatted} (${ram.swapMb} MB) | ZRAM: ${ram.swapBackedByZram} | Inflated: ${ram.isSwapInflated}")
         sb.appendLine()
         sb.appendLine("[CPU]")
-        sb.appendLine("Cores: ${cpu.reportedCores} reported / ${cpu.activeCores} active (wake test: ${cpu.wakeTestPerformed})")
+        sb.appendLine("Cores: ${cpu.reportedCores} reported / ${cpu.activeCores} active (wake test: ${cpu.wakeTestPerformed}, freq readable: ${cpu.frequenciesReadable})")
         cpu.coreDetails.forEach { core ->
             sb.appendLine("  Core ${core.index}: online=${core.isOnline}, cur=${core.currentFreqMhz} MHz, max=${core.maxFreqMhz} MHz")
         }
@@ -148,12 +169,18 @@ data class AuditReport(
         sb.appendLine("[Storage]")
         sb.appendLine("/data total: ${storage.totalDataGbFormatted} | free: ${storage.freeDataGbFormatted}")
         if (storage.flashChips.isNotEmpty()) {
-            sb.appendLine("Physical flash (raw): ${storage.physicalFlashGbFormatted} (complete: ${storage.flashChipsComplete})")
+            sb.appendLine("Physical internal flash (raw): ${storage.physicalFlashGbFormatted} (complete: ${storage.flashChipsComplete})")
             storage.flashChips.forEach { chip ->
                 sb.appendLine("  ${chip.name}: ${chip.sizeGbFormatted} (${chip.sizeMb} MB)${if (chip.readViaRoot) " [root]" else ""}")
             }
         } else {
-            sb.appendLine("Physical flash (raw): not readable")
+            sb.appendLine("Physical internal flash (raw): not readable")
+        }
+        if (storage.externalChips.isNotEmpty()) {
+            sb.appendLine("External removable storage (USB/SD, excluded from internal): ${storage.externalStorageGbFormatted}")
+            storage.externalChips.forEach { chip ->
+                sb.appendLine("  ${chip.name}: ${chip.sizeGbFormatted} (${chip.sizeMb} MB) [removable]${if (chip.readViaRoot) " [root]" else ""}")
+            }
         }
         sb.appendLine()
         sb.appendLine("[Storage Verification Test]")
@@ -161,7 +188,7 @@ data class AuditReport(
             sb.appendLine("Not performed")
         } else {
             sb.appendLine("Tested: ${storageTest.testedMb} MB | Write: ${storageTest.writeSpeedMbPerSec} MB/s | Read: ${storageTest.readSpeedMbPerSec} MB/s")
-            sb.appendLine("Corrupted: ${storageTest.isCorrupted} | ${storageTest.message}")
+            sb.appendLine("Corrupted: ${storageTest.isCorrupted} | Error: ${storageTest.hasError} | CacheWarning: ${storageTest.cacheWarning} | ${storageTest.message}")
         }
         sb.appendLine()
         sb.appendLine("[Root & Kernel]")

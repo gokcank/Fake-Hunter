@@ -36,9 +36,9 @@ object ShellRunner {
                 }
             }
 
-            val deadline = System.currentTimeMillis() + timeoutMs
+            val deadlineNs = System.nanoTime() + timeoutMs * 1_000_000L
             var exitCode: Int? = null
-            while (exitCode == null && System.currentTimeMillis() < deadline) {
+            while (exitCode == null && System.nanoTime() < deadlineNs) {
                 try {
                     exitCode = process.exitValue()
                 } catch (_: IllegalThreadStateException) {

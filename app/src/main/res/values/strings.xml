@@ -28,8 +28,13 @@
     <string name="metric_storage">Total /data: %1$s (Free: %2$s)</string>
     
     <!-- Warnings -->
-    <string name="warn_swap_inflated">RAM inflated with Swap space!</string>
+    <string name="warn_swap_inflated">High swap / virtual RAM allocation detected!</string>
+    <string name="warn_ram_spoofed">Reported RAM contradicts physical kernel memory!</string>
+    <string name="ram_virtual_active">Virtual RAM / ZRAM active (rely on physical RAM)</string>
+    <string name="ram_swap_normal">Swap Normal</string>
     <string name="warn_cores_fake">Reported cores are dormant/fake!</string>
+    <string name="cpu_cores_verified">All reported cores verified</string>
+    <string name="cpu_freq_unreadable">Core frequencies unreadable (system restriction)</string>
     <string name="warn_android_spoofed">Android version is spoofed!</string>
     <string name="warn_known_fake">Known fake chipset signature identified!</string>
 
@@ -46,10 +51,13 @@
     <string name="storage_test_passed">Verification PASSED (%1$.1f MB/s W, %2$.1f MB/s R)</string>
     <string name="storage_test_failed">CORRUPTION DETECTED!</string>
     <string name="storage_test_skipped">Test skipped: %1$s</string>
+    <string name="storage_test_error">Test interrupted (I/O error): %1$s</string>
+    <string name="storage_test_cache_note">Note: Test size is smaller than RAM; read speed may reflect OS cache.</string>
     <string name="storage_test_running">Test running…</string>
     <string name="storage_test_tested">Tested size: %1$d MB</string>
     <string name="metric_flash_physical">Physical flash chip: %1$s</string>
     <string name="metric_flash_unreadable">Physical flash chip: not readable</string>
+    <string name="metric_external_storage">External USB / SD: %1$s (excluded from internal)</string>
     <string name="root_partitions">Kernel partitions: %1$d</string>
     <string name="root_dmesg_lines">Kernel log lines: %1$d</string>
     <string name="cpu_wake_done">Core wake test performed</string>

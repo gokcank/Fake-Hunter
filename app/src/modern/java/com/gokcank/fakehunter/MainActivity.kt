@@ -379,10 +379,15 @@ fun ModernDashboard(
             ) {
                 Text("Physical RAM: ${report.ram.physicalGbFormatted}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Text("Swap / ZRAM: ${report.ram.swapGbFormatted}", color = Color(0xFF90A4AE), fontSize = 12.sp)
-                if (report.ram.isSwapInflated) {
-                    Text(stringResource(R.string.warn_swap_inflated), color = Color(0xFFFF1744), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                } else {
-                    Text("Swap Normal", color = Color(0xFF00E676), fontSize = 12.sp)
+                when {
+                    report.ram.isRamSpoofed ->
+                        Text(stringResource(R.string.warn_ram_spoofed), color = Color(0xFFFF1744), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    report.ram.isSwapInflated ->
+                        Text(stringResource(R.string.warn_swap_inflated), color = Color(0xFFFFD600), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    report.ram.hasVirtualRamNotice ->
+                        Text(stringResource(R.string.ram_virtual_active), color = Color(0xFF00E5FF), fontSize = 12.sp)
+                    else ->
+                        Text(stringResource(R.string.ram_swap_normal), color = Color(0xFF00E676), fontSize = 12.sp)
                 }
             }
         }
@@ -399,10 +404,13 @@ fun ModernDashboard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Reported: ${report.cpu.reportedCores} | Active: ${report.cpu.activeCores}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                if (report.cpu.isFakeCoresDetected) {
-                    Text(stringResource(R.string.warn_cores_fake), color = Color(0xFFFF1744), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                } else {
-                    Text("All reported cores verified", color = Color(0xFF00E676), fontSize = 12.sp)
+                when {
+                    !report.cpu.frequenciesReadable ->
+                        Text(stringResource(R.string.cpu_freq_unreadable), color = Color(0xFFFFD600), fontSize = 12.sp)
+                    report.cpu.isFakeCoresDetected ->
+                        Text(stringResource(R.string.warn_cores_fake), color = Color(0xFFFF1744), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    else ->
+                        Text(stringResource(R.string.cpu_cores_verified), color = Color(0xFF00E676), fontSize = 12.sp)
                 }
                 if (report.cpu.wakeTestPerformed) {
                     Text(stringResource(R.string.cpu_wake_done), color = Color(0xFF90A4AE), fontSize = 11.sp)
@@ -422,6 +430,12 @@ fun ModernDashboard(
                     )
                 } else {
                     Text(stringResource(R.string.metric_flash_unreadable), color = Color(0xFF90A4AE), fontSize = 12.sp)
+                }
+                if (report.storage.externalChips.isNotEmpty()) {
+                    Text(
+                        stringResource(R.string.metric_external_storage, report.storage.externalStorageGbFormatted),
+                        color = Color(0xFF90A4AE), fontSize = 11.sp
+                    )
                 }
             }
         }
@@ -473,6 +487,8 @@ fun ModernDashboard(
                 val test = report.storageTest
                 when {
                     test == null -> Unit
+                    test.hasError ->
+                        Text(stringResource(R.string.storage_test_error, test.message), color = Color(0xFFFFD600), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     test.wasSkipped ->
                         Text(stringResource(R.string.storage_test_skipped, test.message), color = Color(0xFFFFD600), fontSize = 11.sp)
                     test.isCorrupted ->
@@ -483,6 +499,9 @@ fun ModernDashboard(
                             stringResource(R.string.storage_test_passed, test.writeSpeedMbPerSec, test.readSpeedMbPerSec),
                             color = Color(0xFF00E676), fontSize = 11.sp, fontWeight = FontWeight.Bold
                         )
+                        if (test.cacheWarning) {
+                            Text(stringResource(R.string.storage_test_cache_note), color = Color(0xFF90A4AE), fontSize = 10.sp)
+                        }
                     }
                 }
             }
@@ -494,7 +513,11 @@ fun ModernDashboard(
             Text("Findings / Bulgular:", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
             report.issues.forEach { issue ->
-                val issueColor = if (issue.severity == IssueSeverity.FAKE) Color(0xFFFF1744) else Color(0xFFFFD600)
+                val issueColor = when (issue.severity) {
+                    IssueSeverity.FAKE -> Color(0xFFFF1744)
+                    IssueSeverity.WARNING -> Color(0xFFFFD600)
+                    IssueSeverity.INFO -> Color(0xFF00E5FF)
+                }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()

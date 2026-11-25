@@ -18,18 +18,25 @@ object QrHelper {
             appendLine("Model: ${report.system.model} (${report.system.manufacturer})")
             appendLine("OS: Android ${report.system.reportedRelease} (API ${report.system.actualSdkLevel})")
             appendLine("RAM: ${report.ram.physicalGbFormatted} (Swap: ${report.ram.swapGbFormatted})")
-            if (report.ram.isSwapInflated) appendLine("⚠️ RAM INFLATED!")
-            appendLine("CPU: ${report.cpu.reportedCores} rep / ${report.cpu.activeCores} act")
+            if (report.ram.isRamSpoofed) {
+                appendLine("⚠️ RAM SPOOFED!")
+            } else if (report.ram.isSwapInflated) {
+                appendLine("⚠️ HIGH SWAP!")
+            }
+            appendLine("CPU: ${report.cpu.reportedCores} rep / ${report.cpu.activeCores} act${if (!report.cpu.frequenciesReadable) " (unreadable)" else ""}")
             if (report.cpu.isFakeCoresDetected) appendLine("⚠️ FAKE CORES DETECTED!")
             appendLine("Storage: ${report.storage.totalDataGbFormatted} data")
             if (report.storage.flashChips.isNotEmpty()) {
                 appendLine("Flash: ${report.storage.physicalFlashGbFormatted}")
             }
+            if (report.storage.externalChips.isNotEmpty()) {
+                appendLine("External USB/SD: ${report.storage.externalStorageGbFormatted}")
+            }
             if (report.storageTest != null && !report.storageTest.wasSkipped) {
-                if (report.storageTest.isCorrupted) {
-                    appendLine("⚠️ STORAGE CORRUPT!")
-                } else {
-                    appendLine("Storage Test: PASSED (${report.storageTest.writeSpeedMbPerSec} MB/s W)")
+                when {
+                    report.storageTest.isCorrupted -> appendLine("⚠️ STORAGE CORRUPT!")
+                    report.storageTest.hasError -> appendLine("Storage Test: I/O ERROR")
+                    else -> appendLine("Storage Test: PASSED (${report.storageTest.writeSpeedMbPerSec} MB/s W)")
                 }
             }
             appendLine("Root: ${if (report.root.isRootGranted) "Granted" else if (report.root.isRootBinaryFound) "Binary found" else "None"}")

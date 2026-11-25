@@ -73,6 +73,8 @@
     <string name="settings_lang_en">English</string>
     <string name="settings_auto_root">Auto Root Request</string>
     <string name="settings_auto_root_desc">Prompt for root access during audit if su binary is found</string>
+    <string name="settings_state_enabled">Enabled</string>
+    <string name="settings_state_disabled">Disabled</string>
     <string name="settings_storage_test">Storage Test Size</string>
     <string name="settings_storage_test_desc">Block size for physical flash integrity test</string>
     <string name="qr_dialog_title">Audit Summary QR</string>

@@ -572,15 +572,29 @@ fun SettingsDialog(
                 Text(text = stringResource(R.string.settings_auto_root), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Text(text = stringResource(R.string.settings_auto_root_desc), color = Color(0xFF90A4AE), fontSize = 11.sp)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { autoRoot = !autoRoot },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = if (autoRoot) "Enabled" else "Disabled", color = Color.White, fontSize = 13.sp)
+                    Text(
+                        text = if (autoRoot) stringResource(R.string.settings_state_enabled) else stringResource(R.string.settings_state_disabled),
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     Switch(
                         checked = autoRoot,
                         onCheckedChange = { autoRoot = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00E5FF))
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF121418),
+                            checkedTrackColor = Color(0xFF00E5FF),
+                            checkedBorderColor = Color.Transparent,
+                            uncheckedThumbColor = Color(0xFF90A4AE),
+                            uncheckedTrackColor = Color(0xFF2D333D),
+                            uncheckedBorderColor = Color(0xFF90A4AE)
+                        )
                     )
                 }
 

@@ -73,6 +73,8 @@
     <string name="settings_lang_en">English</string>
     <string name="settings_auto_root">Otomatik Root İsteme</string>
     <string name="settings_auto_root_desc">Cihazda su ikili dosyası varsa teftiş sırasında otomatik yetki iste</string>
+    <string name="settings_state_enabled">Açık</string>
+    <string name="settings_state_disabled">Kapalı</string>
     <string name="settings_storage_test">Depolama Test Boyutu</string>
     <string name="settings_storage_test_desc">Fiziksel hafıza doğrulama test boyutu</string>
     <string name="qr_dialog_title">Teftiş Özeti QR</string>

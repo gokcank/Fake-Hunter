@@ -56,34 +56,82 @@ Budget Android Head Units and TV streaming boxes from various marketplaces frequ
 
 ---
 
-## 🚀 Usage / Kullanım
+## 🚀 Kullanım Rehberi (Türkçe)
 
-### Option 1: Android Application (No PC required)
-Download the latest APK from [GitHub Releases](https://github.com/gokcank/Fake-Hunter/releases):
-* **Modern Flavor:** Recommended for modern head units, tablets, and phones.
-* **Classic Flavor:** Recommended for ultra low-spec units (Mali-400 GPU, 1GB RAM).
+### Yöntem 1: Android Uygulaması ile Teftiş (Tavsiye Edilen - Bilgisayar Gerektirmez)
+[GitHub Releases](https://github.com/gokcank/Fake-Hunter/releases) sayfasından en güncel APK'yı indirin veya bir USB belleğe kopyalayarak cihaza takın:
+* **Modern Varyant (`FakeHunter-v1.1.0-Modern.apk`):** Jetpack Compose ile geliştirilmiş modern, reaktif arayüz. Güncel teypler, tabletler ve telefonlar için önerilir.
+* **Klasik Varyant (`FakeHunter-v1.1.0-Classic.apk`):** Eski Android sürümleri (Android 5+) ve zayıf donanımlı teypler (Mali-400 GPU, 1-2 GB RAM) için optimize edilmiş ultra hafif XML Views arayüzü.
 
-### Option 2: ADB Runner (From Computer)
-Connect your Android device via USB debugging or Wi-Fi ADB, then run:
+**Teftiş Süreci ve Özellikler:**
+1. **Otomatik Hepsi-Bir-Arada Teftiş:** Uygulama açıldığı anda veya *Tekrar Teftiş Et* butonuna basıldığında RAM, SWAP şişirmesi, CPU çekirdek uyandırma testi, `/sys/block/*/size` fiziksel flash çip boyutu ve 100 MB rastgele veri yazma/okuma doğrulama testini sırayla otomatik icra eder.
+2. **Adli Teftiş ZIP Arşivi (SAF):** *Raporu Kaydet (ZIP)* butonuna dokunarak mevcut teftiş raporunu ve 11 ayrı sistem dökümünü (`getprop`, `cpuinfo`, `meminfo`, `partitions`, `mounts`, `logcat`, `dmesg`, vb.) doğrudan USB belleğe veya yerel hafızaya `.zip` arşivi olarak kaydedebilirsiniz.
+3. **Ekranda Çevrimdışı QR Kod:** *QR Kod* butonuna basarak teftiş özetini ekranda QR koda dökebilir, telefonunuzun kamerasıyla saniyeler içinde tarayarak yanınıza alabilirsiniz.
+4. **Ayarlar:** Uygulama dilini (Türkçe / English / Sistem Varsayılanı), otomatik root yetkisi isteme tercihini ve depolama test blok boyutunu (100 MB, 250 MB, 500 MB) ayarlayabilirsiniz.
+
+### Yöntem 2: Bilgisayardan ADB ile Teftiş (Host Script)
+Cihazı USB kablosuyla veya Wi-Fi ADB üzerinden bilgisayarınıza bağlayın:
 
 ```bash
-# Automatic detection
+# Otomatik cihaz tespiti ve varsayılan teftiş
 ./scripts/fake_hunter_adb.sh
 
-# Target specific device with Turkish language & wake test
-./scripts/fake_hunter_adb.sh -s <device_serial> --lang tr --wake
+# Belirli bir cihazı hedefleyerek Türkçe dilde ve çekirdek uyandırmayla çalıştırma
+./scripts/fake_hunter_adb.sh -s <cihaz_seri_no> --lang tr --wake --storage-test 100
 
-# Export reports
+# Raporları metin ve JSON olarak bilgisayara kaydetme
+./scripts/fake_hunter_adb.sh --save teftis_raporu.txt --json teftis_raporu.json
+```
+
+### Yöntem 3: Cihaz Üzerinde Terminal Betiği (Kurulumsuz)
+Cihazda Termux veya Terminal Emulator yüklüyse `scripts/fake_hunter.sh` dosyasını USB bellekten veya dahili hafızadan doğrudan çalıştırabilirsiniz:
+
+```sh
+# Doğrudan çalıştırma (Türkçe dilde)
+sh fake_hunter.sh --lang tr
+
+# Tam teşekküllü teftiş (çekirdek uyandırma + root sorgusu + 100 MB depolama testi)
+sh fake_hunter.sh --lang tr --wake --root --storage-test 100 --output rapor.txt --json rapor.json
+```
+
+---
+
+## 🚀 Usage Guide (English)
+
+### Option 1: Android Application (Recommended - No PC Required)
+Download the latest release APK from [GitHub Releases](https://github.com/gokcank/Fake-Hunter/releases) or transfer it via a USB flash drive:
+* **Modern Flavor (`FakeHunter-v1.1.0-Modern.apk`):** Built with Jetpack Compose. Responsive, modern UI designed for high-resolution multimedia screens, tablets, and phones.
+* **Classic Flavor (`FakeHunter-v1.1.0-Classic.apk`):** Ultra lightweight XML Views implementation optimized for entry-level automotive head units (Mali-400 GPU, 1-2 GB RAM, Android 5.0+).
+
+**Audit Workflow & Features:**
+1. **All-in-One Automated Audit:** On startup or by clicking *Re-inspect*, the app automatically runs physical RAM analysis, Swap inflation detection, CPU core wake-up benchmarking, `/sys/block/*/size` physical flash silicon capacity detection, and 100 MB physical storage verification.
+2. **Forensic Evidence ZIP Export (SAF):** Click *Save Evidence (ZIP)* to package the on-screen audit results together with 11 low-level diagnostic dumps (`getprop`, `cpuinfo`, `meminfo`, `partitions`, `mounts`, `logcat`, `dmesg`, etc.) into a forensic `.zip` archive via Android's Storage Access Framework file picker.
+3. **On-Screen QR Code:** Click *QR Code* to render an offline ZXing QR code containing the full audit summary, ready for instant camera capture with your phone.
+4. **Settings Dialog:** Toggle language dynamically (Türkçe / English / System Default), enable/disable automatic root escalation, and customize the physical storage test block size (100 MB, 250 MB, 500 MB).
+
+### Option 2: ADB Runner from Host PC
+Connect your Android target via USB debugging or Wireless ADB:
+
+```bash
+# Auto-detect connected device and run default audit
+./scripts/fake_hunter_adb.sh
+
+# Target specific device with English language, CPU wake test, and 100MB storage test
+./scripts/fake_hunter_adb.sh -s <device_serial> --lang en --wake --storage-test 100
+
+# Export plain-text and JSON reports directly to host machine
 ./scripts/fake_hunter_adb.sh --save audit_report.txt --json audit_report.json
 ```
 
-### Option 3: On-Device Terminal Script
-Copy `scripts/fake_hunter.sh` to your device (via USB stick or download):
+### Option 3: Standalone On-Device Shell Script
+If the device has Termux or Terminal Emulator installed, run `scripts/fake_hunter.sh` directly without installing any APK:
 
 ```sh
-sh fake_hunter.sh
-# or with options:
-sh fake_hunter.sh --lang tr --wake --json /sdcard/report.json
+# Basic run
+sh fake_hunter.sh --lang en
+
+# Comprehensive audit with CPU wake, root check, and physical storage test
+sh fake_hunter.sh --lang en --wake --root --storage-test 100 --output report.txt --json report.json
 ```
 
 ---

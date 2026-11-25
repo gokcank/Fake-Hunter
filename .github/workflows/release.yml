@@ -45,4 +45,6 @@ jobs:
         files: |
           release-apks/FakeHunter-${{ github.ref_name }}-Modern.apk
           release-apks/FakeHunter-${{ github.ref_name }}-Classic.apk
+          scripts/fake_hunter.sh
         generate_release_notes: true
+        make_latest: true

@@ -16,61 +16,139 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvAppTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textColor="@color/white"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvAppSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_subtitle"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Top Action Buttons Row 1 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <LinearLayout
+            <Button
+                android:id="@+id/btnInspect"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/tvAppTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/app_name"
-                    android:textColor="@color/white"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvAppSubtitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/app_subtitle"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
-            <Button
-                android:id="@+id/btnInspect"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
                 android:text="@string/btn_reinspect"
                 android:textColor="@color/black"
                 android:backgroundTint="@color/primary_accent"
                 android:textStyle="bold" />
 
             <Button
+                android:id="@+id/btnSave"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.2"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_save_report"
+                android:textColor="@color/primary_accent"
+                android:backgroundTint="@color/card_dark"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnQr"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.9"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_qr_code"
+                android:textColor="@color/white"
+                android:textSize="12sp"
+                app:strokeColor="@color/card_stroke" />
+        </LinearLayout>
+
+        <!-- Top Action Buttons Row 2 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <Button
                 android:id="@+id/btnCopy"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_weight="1"
                 android:text="@string/btn_copy_report"
                 android:textColor="@color/white"
+                android:textSize="12sp"
+                app:strokeColor="@color/card_stroke" />
+
+            <Button
+                android:id="@+id/btnSettings"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_settings"
+                android:textColor="@color/white"
+                android:textSize="12sp"
                 app:strokeColor="@color/card_stroke" />
 
             <Button
                 android:id="@+id/btnAbout"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:layout_marginStart="8dp"
                 android:text="@string/btn_about"
                 android:textColor="@color/white"
+                android:textSize="12sp"
                 app:strokeColor="@color/card_stroke" />
+        </LinearLayout>
+
+        <!-- Live progress of the audit chain -->
+        <LinearLayout
+            android:id="@+id/llProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:background="@color/card_dark"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/primary_accent"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <ProgressBar
+                android:id="@+id/pbAudit"
+                style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_marginTop="8dp"
+                android:max="100" />
         </LinearLayout>
 
         <!-- Verdict Banner -->
@@ -259,14 +337,14 @@
                         android:textColor="@color/status_green"
                         android:textSize="12sp" />
 
-                    <Button
-                        android:id="@+id/btnWakeTest"
-                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                    <TextView
+                        android:id="@+id/tvCpuWake"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Core Wake Test"
+                        android:text="@string/cpu_wake_done"
+                        android:textColor="@color/text_secondary"
                         android:textSize="11sp"
-                        android:textColor="@color/primary_accent" />
+                        android:visibility="gone" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -307,6 +385,13 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvStorageFlash"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/primary_accent"
                         android:textSize="12sp" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -366,6 +451,14 @@
                         android:textSize="12sp"
                         android:visibility="gone" />
 
+                    <TextView
+                        android:id="@+id/tvRootDmesg"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/primary_accent"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
                     <Button
                         android:id="@+id/btnDeepRootAudit"
                         style="@style/Widget.MaterialComponents.Button.TextButton"
@@ -373,7 +466,8 @@
                         android:layout_height="wrap_content"
                         android:text="@string/btn_deep_root_audit"
                         android:textSize="11sp"
-                        android:textColor="@color/primary_accent" />
+                        android:textColor="@color/primary_accent"
+                        android:visibility="gone" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -410,21 +504,22 @@
                         android:textColor="@color/text_secondary"
                         android:textSize="11sp" />
 
-                    <ProgressBar
-                        android:id="@+id/pbStorageTest"
-                        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="6dp"
-                        android:layout_marginTop="6dp"
-                        android:visibility="gone"
-                        android:max="100" />
-
                     <TextView
                         android:id="@+id/tvStorageTestProgress"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
+                        android:text="@string/storage_test_running"
                         android:textColor="@color/primary_accent"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvStorageTestSize"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textColor="@color/text_secondary"
                         android:textSize="11sp"
                         android:visibility="gone" />
 
@@ -436,17 +531,6 @@
                         android:textSize="11sp"
                         android:textStyle="bold"
                         android:visibility="gone" />
-
-                    <Button
-                        android:id="@+id/btnStartStorageTest"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="@string/btn_start_test"
-                        android:textColor="@color/black"
-                        android:backgroundTint="@color/primary_accent"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
         </LinearLayout>

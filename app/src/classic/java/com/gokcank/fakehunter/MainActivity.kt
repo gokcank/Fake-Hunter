@@ -7,21 +7,57 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import com.gokcank.fakehunter.core.detector.HardwareDetector
+import com.gokcank.fakehunter.core.export.EvidenceCollector
+import com.gokcank.fakehunter.core.model.AuditOptions
 import com.gokcank.fakehunter.core.model.AuditReport
 import com.gokcank.fakehunter.core.model.IssueSeverity
 import com.gokcank.fakehunter.core.model.Verdict
-import com.gokcank.fakehunter.core.storage.StorageTester
+import com.gokcank.fakehunter.core.qr.QrHelper
+import com.gokcank.fakehunter.core.settings.LocaleHelper
+import com.gokcank.fakehunter.core.settings.SettingsManager
 import com.gokcank.fakehunter.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var currentReport: AuditReport? = null
+    private var isInspecting: Boolean = false
+
+    override fun attachBaseContext(newBase: Context) {
+        val lang = SettingsManager.getLanguage(newBase)
+        super.attachBaseContext(LocaleHelper.applyLocale(newBase, lang))
+    }
+
+    private val saveLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        val report = currentReport
+        if (uri != null && report != null) {
+            Thread {
+                val success = try {
+                    contentResolver.openOutputStream(uri)?.use { os ->
+                        EvidenceCollector.exportEvidenceZip(this, report, os)
+                    } ?: false
+                } catch (e: Exception) {
+                    false
+                }
+                runOnUiThread {
+                    val msg = if (success) {
+                        getString(R.string.report_saved_success)
+                    } else {
+                        getString(R.string.report_save_failed)
+                    }
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                }
+            }.start()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,80 +65,234 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.btnInspect.setOnClickListener {
-            runInspection(wake = false)
+            runInspection()
         }
 
-        binding.btnWakeTest.setOnClickListener {
-            runInspection(wake = true)
+        binding.btnSave.setOnClickListener {
+            triggerSaveZip()
+        }
+
+        binding.btnQr.setOnClickListener {
+            showQrDialog()
         }
 
         binding.btnDeepRootAudit.setOnClickListener {
-            runInspection(wake = false, requestRoot = true)
-        }
-
-        binding.btnStartStorageTest.setOnClickListener {
-            runStorageTest(500)
+            runInspection(SettingsManager.getAuditOptions(this).copy(requestRoot = true))
         }
 
         binding.btnCopy.setOnClickListener {
             copyReport()
         }
 
+        binding.btnSettings.setOnClickListener {
+            showSettingsDialog()
+        }
+
         binding.btnAbout.setOnClickListener {
             showAboutDialog()
         }
 
-        runInspection(wake = false)
+        runInspection()
     }
 
-    private fun runInspection(wake: Boolean = false, requestRoot: Boolean = false) {
+    private fun runInspection(options: AuditOptions = SettingsManager.getAuditOptions(this)) {
+        if (isInspecting) return
+        isInspecting = true
         binding.btnInspect.isEnabled = false
         binding.btnInspect.text = "..."
+        binding.btnSave.isEnabled = false
+        binding.btnQr.isEnabled = false
+        binding.btnCopy.isEnabled = false
+        binding.llProgress.visibility = View.VISIBLE
+        binding.pbAudit.progress = 0
+        binding.tvProgress.text = getString(R.string.progress_system)
 
         Thread {
-            val report = HardwareDetector.performAudit(this, wakeTest = wake, requestRoot = requestRoot)
+            val report = HardwareDetector.performAudit(this, options) { phase, pct, detail ->
+                runOnUiThread {
+                    binding.pbAudit.progress = pct
+                    binding.tvProgress.text = phaseLabel(phase, detail)
+                }
+            }
             runOnUiThread {
                 currentReport = report
                 displayReport(report)
+                isInspecting = false
+                binding.llProgress.visibility = View.GONE
                 binding.btnInspect.isEnabled = true
                 binding.btnInspect.text = getString(R.string.btn_reinspect)
+                binding.btnSave.isEnabled = true
+                binding.btnQr.isEnabled = true
+                binding.btnCopy.isEnabled = true
             }
         }.start()
     }
 
-    private fun runStorageTest(testMb: Int = 500) {
-        binding.btnStartStorageTest.isEnabled = false
-        binding.btnInspect.isEnabled = false
-        binding.pbStorageTest.visibility = View.VISIBLE
-        binding.pbStorageTest.progress = 0
-        binding.tvStorageTestProgress.visibility = View.VISIBLE
-        binding.tvStorageTestProgress.text = "Initializing..."
-        binding.tvStorageTestResult.visibility = View.GONE
+    private fun triggerSaveZip() {
+        val report = currentReport ?: return
+        val fileName = EvidenceCollector.generateZipFileName(report)
+        saveLauncher.launch(fileName)
+    }
 
-        Thread {
-            val result = StorageTester.runVerificationTest(this, testMb = testMb) { pct, msg ->
-                runOnUiThread {
-                    binding.pbStorageTest.progress = pct
-                    binding.tvStorageTestProgress.text = msg
+    private fun showQrDialog() {
+        val report = currentReport ?: return
+        val qrText = QrHelper.generateAuditSummary(report)
+        val qrBitmap = QrHelper.generateQrBitmap(qrText, 512) ?: return
+
+        val imageView = ImageView(this).apply {
+            setImageBitmap(qrBitmap)
+            setBackgroundColor(Color.WHITE)
+            val p = (16 * resources.displayMetrics.density).toInt()
+            setPadding(p, p, p, p)
+            val size = (260 * resources.displayMetrics.density).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                gravity = android.view.Gravity.CENTER
+            }
+        }
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            val p = (16 * resources.displayMetrics.density).toInt()
+            setPadding(p, p, p, p)
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.qr_dialog_desc)
+                setTextColor(Color.parseColor("#90A4AE"))
+                textSize = 12f
+                setPadding(0, 0, 0, (12 * resources.displayMetrics.density).toInt())
+            })
+            addView(imageView)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.qr_dialog_title))
+            .setView(container)
+            .setPositiveButton(getString(R.string.btn_close), null)
+            .show()
+    }
+
+    private fun showSettingsDialog() {
+        val currentLang = SettingsManager.getLanguage(this)
+        var selectedLang = currentLang
+        var autoRoot = SettingsManager.isAutoRoot(this)
+        var storageMb = SettingsManager.getStorageTestMb(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = (16 * resources.displayMetrics.density).toInt()
+            setPadding(p, p, p, p)
+        }
+
+        // Language radio group
+        val tvLangHeader = TextView(this).apply {
+            text = getString(R.string.settings_language)
+            setTextColor(Color.parseColor("#00E5FF"))
+            textSize = 14f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        container.addView(tvLangHeader)
+
+        val rgLang = RadioGroup(this)
+        val rbSystem = RadioButton(this).apply {
+            text = getString(R.string.settings_lang_system)
+            setTextColor(Color.WHITE)
+            isChecked = selectedLang == SettingsManager.LANG_SYSTEM
+        }
+        val rbTr = RadioButton(this).apply {
+            text = getString(R.string.settings_lang_tr)
+            setTextColor(Color.WHITE)
+            isChecked = selectedLang == SettingsManager.LANG_TR
+        }
+        val rbEn = RadioButton(this).apply {
+            text = getString(R.string.settings_lang_en)
+            setTextColor(Color.WHITE)
+            isChecked = selectedLang == SettingsManager.LANG_EN
+        }
+        rgLang.addView(rbSystem)
+        rgLang.addView(rbTr)
+        rgLang.addView(rbEn)
+        container.addView(rgLang)
+
+        // Divider
+        container.addView(View(this).apply {
+            setBackgroundColor(Color.parseColor("#2D333D"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 2).apply {
+                setMargins(0, 16, 0, 16)
+            }
+        })
+
+        // Auto Root CheckBox / Switch
+        val cbAutoRoot = CheckBox(this).apply {
+            text = getString(R.string.settings_auto_root)
+            setTextColor(Color.WHITE)
+            isChecked = autoRoot
+        }
+        container.addView(cbAutoRoot)
+        container.addView(TextView(this).apply {
+            text = getString(R.string.settings_auto_root_desc)
+            setTextColor(Color.parseColor("#90A4AE"))
+            textSize = 11f
+        })
+
+        // Divider
+        container.addView(View(this).apply {
+            setBackgroundColor(Color.parseColor("#2D333D"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 2).apply {
+                setMargins(0, 16, 0, 16)
+            }
+        })
+
+        // Storage Test Size
+        val tvStorageHeader = TextView(this).apply {
+            text = getString(R.string.settings_storage_test)
+            setTextColor(Color.parseColor("#00E5FF"))
+            textSize = 14f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        container.addView(tvStorageHeader)
+
+        val rgStorage = RadioGroup(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(100, 250, 500).forEach { size ->
+            val rb = RadioButton(this).apply {
+                text = "$size MB"
+                setTextColor(Color.WHITE)
+                isChecked = storageMb == size
+                setOnClickListener { storageMb = size }
+            }
+            rgStorage.addView(rb)
+        }
+        container.addView(rgStorage)
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.settings_title))
+            .setView(container)
+            .setPositiveButton(getString(R.string.btn_close)) { _, _ ->
+                val newLang = when {
+                    rbTr.isChecked -> SettingsManager.LANG_TR
+                    rbEn.isChecked -> SettingsManager.LANG_EN
+                    else -> SettingsManager.LANG_SYSTEM
+                }
+                val langChanged = newLang != currentLang
+                SettingsManager.setLanguage(this, newLang)
+                SettingsManager.setAutoRoot(this, cbAutoRoot.isChecked)
+                SettingsManager.setStorageTestMb(this, storageMb)
+                if (langChanged) {
+                    recreate()
                 }
             }
-            runOnUiThread {
-                binding.pbStorageTest.visibility = View.GONE
-                binding.tvStorageTestProgress.visibility = View.GONE
-                binding.tvStorageTestResult.visibility = View.VISIBLE
+            .show()
+    }
 
-                if (result.isCorrupted) {
-                    binding.tvStorageTestResult.setTextColor(Color.parseColor("#FF1744"))
-                    binding.tvStorageTestResult.text = "${getString(R.string.storage_test_failed)}: ${result.message}"
-                } else {
-                    binding.tvStorageTestResult.setTextColor(Color.parseColor("#00E676"))
-                    binding.tvStorageTestResult.text = getString(R.string.storage_test_passed, result.writeSpeedMbPerSec, result.readSpeedMbPerSec)
-                }
-
-                binding.btnStartStorageTest.isEnabled = true
-                binding.btnInspect.isEnabled = true
-            }
-        }.start()
+    private fun phaseLabel(phase: HardwareDetector.Phase, detail: String): String {
+        val base = when (phase) {
+            HardwareDetector.Phase.SYSTEM -> getString(R.string.progress_system)
+            HardwareDetector.Phase.CPU_WAKE -> getString(R.string.progress_cpu)
+            HardwareDetector.Phase.ROOT -> getString(R.string.progress_root)
+            HardwareDetector.Phase.FLASH -> getString(R.string.progress_flash)
+            HardwareDetector.Phase.STORAGE_TEST -> getString(R.string.progress_storage)
+            HardwareDetector.Phase.DONE -> getString(R.string.progress_done)
+        }
+        return if (detail.isNotBlank()) "$base $detail" else base
     }
 
     private fun displayReport(report: AuditReport) {
@@ -141,10 +331,22 @@ class MainActivity : AppCompatActivity() {
             binding.tvCpuWarning.text = "All reported cores verified"
             binding.tvCpuWarning.setTextColor(Color.parseColor("#00E676"))
         }
+        if (report.cpu.wakeTestPerformed) {
+            binding.tvCpuWake.visibility = View.VISIBLE
+        } else {
+            binding.tvCpuWake.visibility = View.GONE
+        }
 
         // Storage
         binding.tvStorageTotal.text = "Total /data: ${report.storage.totalDataGbFormatted}"
         binding.tvStorageFree.text = "Free Space: ${report.storage.freeDataGbFormatted}"
+        if (report.storage.flashChips.isNotEmpty()) {
+            binding.tvStorageFlash.visibility = View.VISIBLE
+            binding.tvStorageFlash.text = getString(R.string.metric_flash_physical, report.storage.physicalFlashGbFormatted)
+        } else {
+            binding.tvStorageFlash.visibility = View.VISIBLE
+            binding.tvStorageFlash.text = getString(R.string.metric_flash_unreadable)
+        }
 
         // Root Security
         val (rootText, rootColor) = when {
@@ -157,9 +359,52 @@ class MainActivity : AppCompatActivity() {
         binding.tvRootSelinux.text = "SELinux: ${report.root.selinuxMode}"
         if (report.root.rawPartitions.isNotEmpty()) {
             binding.tvRootPartitions.visibility = View.VISIBLE
-            binding.tvRootPartitions.text = "Kernel Partitions: ${report.root.rawPartitions.size} devices"
+            binding.tvRootPartitions.text = getString(R.string.root_partitions, report.root.rawPartitions.size)
         } else {
             binding.tvRootPartitions.visibility = View.GONE
+        }
+        if (report.root.dmesgHighlights.isNotEmpty()) {
+            binding.tvRootDmesg.visibility = View.VISIBLE
+            binding.tvRootDmesg.text = getString(R.string.root_dmesg_lines, report.root.dmesgHighlights.size)
+        } else {
+            binding.tvRootDmesg.visibility = View.GONE
+        }
+        if (report.root.isRootBinaryFound && !report.root.isRootGranted) {
+            binding.btnDeepRootAudit.visibility = View.VISIBLE
+        } else {
+            binding.btnDeepRootAudit.visibility = View.GONE
+        }
+
+        // Storage Test Result
+        val test = report.storageTest
+        when {
+            test == null -> {
+                binding.tvStorageTestProgress.visibility = View.GONE
+                binding.tvStorageTestSize.visibility = View.GONE
+                binding.tvStorageTestResult.visibility = View.GONE
+            }
+            test.wasSkipped -> {
+                binding.tvStorageTestProgress.visibility = View.GONE
+                binding.tvStorageTestSize.visibility = View.GONE
+                binding.tvStorageTestResult.visibility = View.VISIBLE
+                binding.tvStorageTestResult.setTextColor(Color.parseColor("#FFD600"))
+                binding.tvStorageTestResult.text = getString(R.string.storage_test_skipped, test.message)
+            }
+            test.isCorrupted -> {
+                binding.tvStorageTestProgress.visibility = View.GONE
+                binding.tvStorageTestSize.visibility = View.GONE
+                binding.tvStorageTestResult.visibility = View.VISIBLE
+                binding.tvStorageTestResult.setTextColor(Color.parseColor("#FF1744"))
+                binding.tvStorageTestResult.text = "${getString(R.string.storage_test_failed)}: ${test.message}"
+            }
+            else -> {
+                binding.tvStorageTestProgress.visibility = View.GONE
+                binding.tvStorageTestSize.visibility = View.VISIBLE
+                binding.tvStorageTestSize.text = getString(R.string.storage_test_tested, test.testedMb)
+                binding.tvStorageTestResult.visibility = View.VISIBLE
+                binding.tvStorageTestResult.setTextColor(Color.parseColor("#00E676"))
+                binding.tvStorageTestResult.text = getString(R.string.storage_test_passed, test.writeSpeedMbPerSec, test.readSpeedMbPerSec)
+            }
         }
 
         // Findings
@@ -168,17 +413,17 @@ class MainActivity : AppCompatActivity() {
             val card = CardView(this).apply {
                 radius = 8f * resources.displayMetrics.density
                 setCardBackgroundColor(Color.parseColor("#1C2026"))
-                val lp = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
                     setMargins(0, 0, 0, (8 * resources.displayMetrics.density).toInt())
                 }
                 layoutParams = lp
             }
 
-            val inner = android.widget.LinearLayout(this).apply {
-                orientation = android.widget.LinearLayout.VERTICAL
+            val inner = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
                 val p = (12 * resources.displayMetrics.density).toInt()
                 setPadding(p, p, p, p)
             }
@@ -219,7 +464,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showAboutDialog() {
         val message = StringBuilder().apply {
-            appendLine(getString(R.string.about_version, "1.0.0"))
+            appendLine(getString(R.string.about_version, BuildConfig.VERSION_NAME))
             appendLine()
             appendLine(getString(R.string.about_description))
             appendLine()
@@ -230,7 +475,7 @@ class MainActivity : AppCompatActivity() {
             appendLine(getString(R.string.about_github_url))
         }.toString()
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle(getString(R.string.about_title))
             .setMessage(message)
             .setPositiveButton(getString(R.string.btn_close), null)

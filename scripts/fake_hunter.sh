@@ -7,7 +7,7 @@
 
 set -u
 
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="1.1.0"
 
 # Colors (ANSI)
 COLOR_RESET="\033[0m"
@@ -113,6 +113,14 @@ if [ -z "$TARGET_LANG" ]; then
     esac
 fi
 
+# Helper for integer-based GB calculation (immune to locale decimal point issues)
+calc_gb() {
+    mb_val="$1"
+    gb_int=$((mb_val / 1024))
+    gb_dec=$(( (mb_val % 1024) * 10 / 1024 ))
+    echo "${gb_int}.${gb_dec}"
+}
+
 # Localization helper
 t() {
     key="$1"
@@ -138,6 +146,8 @@ t() {
             CORE_FAKE_WARNING) echo "Sahte çekirdek uyarısı: Bildirilen bazı çekirdekler frekans üretmiyor!" ;;
             STORAGE_TOTAL) echo "Gerçek Kullanıcı Bölümü (/data)" ;;
             STORAGE_FREE) echo "Kullanılabilir Boş Alan" ;;
+            PHYSICAL_FLASH) echo "Fiziksel Flash / eMMC Çipleri" ;;
+            STORAGE_SPOOFED_WARNING) echo "Sahte depolama uyarısı: /data bölümü fiziksel çipten daha büyük gösteriliyor!" ;;
             PLATFORM) echo "Platform / Yonga Seti" ;;
             BOARD) echo "Anakart (Board)" ;;
             HARDWARE) echo "Donanım (Hardware)" ;;
@@ -182,6 +192,8 @@ t() {
             CORE_FAKE_WARNING) echo "Fake core warning: Reported cores fail to generate active frequency!" ;;
             STORAGE_TOTAL) echo "Actual User Partition (/data)" ;;
             STORAGE_FREE) echo "Available Free Space" ;;
+            PHYSICAL_FLASH) echo "Physical Flash / eMMC Chips" ;;
+            STORAGE_SPOOFED_WARNING) echo "Fake storage warning: /data partition reports larger capacity than physical chip!" ;;
             PLATFORM) echo "Platform / Chipset" ;;
             BOARD) echo "Board" ;;
             HARDWARE) echo "Hardware" ;;
@@ -354,7 +366,7 @@ if [ "$REPORTED_CORES" -gt "$ACTIVE_CORES" ] && [ "$ACTIVE_CORES" -gt 0 ]; then
     add_finding "FAKE" "$(t CORE_FAKE_WARNING) ($REPORTED_CORES reported, only $ACTIVE_CORES active)"
 fi
 
-# 3. Storage Analysis (/data)
+# 3. Storage Analysis (/data & Physical Flash)
 DATA_TOTAL_MB=0
 DATA_FREE_MB=0
 if [ -d /data ]; then
@@ -371,6 +383,43 @@ if [ -d /data ]; then
         esac
         DATA_TOTAL_MB=$((DATA_TOTAL_KB / 1024))
         DATA_FREE_MB=$((DATA_FREE_KB / 1024))
+    fi
+fi
+
+# Physical Flash Chips Detection via /sys/block/*/size (512-byte sectors)
+FLASH_CHIPS_INFO=""
+TOTAL_FLASH_MB=0
+
+if [ -d /sys/block ]; then
+    for dev_path in /sys/block/*; do
+        [ -e "$dev_path" ] || continue
+        dev_name=$(basename "$dev_path")
+        case "$dev_name" in
+            loop*|ram*|zram*|dm-*|md*|sr*|nbd*|vnd*|fd*|*boot*|*rpmb*)
+                continue
+                ;;
+        esac
+
+        if [ -f "${dev_path}/size" ]; then
+            SECTOR_COUNT=$(cat "${dev_path}/size" 2>/dev/null || echo 0)
+            case "$SECTOR_COUNT" in
+                ''|*[!0-9]*) SECTOR_COUNT=0 ;;
+            esac
+            if [ "$SECTOR_COUNT" -gt 0 ]; then
+                DEV_MB=$((SECTOR_COUNT / 2048))
+                if [ "$DEV_MB" -gt 0 ]; then
+                    TOTAL_FLASH_MB=$((TOTAL_FLASH_MB + DEV_MB))
+                    FLASH_CHIPS_INFO="${FLASH_CHIPS_INFO}    • ${dev_name}: ${DEV_MB} MB (~$(calc_gb "$DEV_MB") GB)\n"
+                fi
+            fi
+        fi
+    done
+fi
+
+if [ "$TOTAL_FLASH_MB" -gt 0 ] && [ "$DATA_TOTAL_MB" -gt 0 ]; then
+    MARGIN=$((TOTAL_FLASH_MB / 50))
+    if [ "$DATA_TOTAL_MB" -gt $((TOTAL_FLASH_MB + MARGIN)) ]; then
+        add_finding "FAKE" "$(t STORAGE_SPOOFED_WARNING) (/data: ${DATA_TOTAL_MB}MB, Flash: ${TOTAL_FLASH_MB}MB)"
     fi
 fi
 
@@ -422,14 +471,16 @@ fi
 # 6. Root & Security Audit
 ROOT_BINARY_FOUND=0
 ROOT_GRANTED=0
-for su_path in /system/bin/su /system/xbin/su /sbin/su /vendor/bin/su; do
-    if [ -f "$su_path" ]; then
+if command -v getprop >/dev/null 2>&1; then
+    for su_path in /system/bin/su /system/xbin/su /sbin/su /vendor/bin/su; do
+        if [ -f "$su_path" ]; then
+            ROOT_BINARY_FOUND=1
+            break
+        fi
+    done
+    if [ "$ROOT_BINARY_FOUND" -eq 0 ] && command -v su >/dev/null 2>&1; then
         ROOT_BINARY_FOUND=1
-        break
     fi
-done
-if [ "$ROOT_BINARY_FOUND" -eq 0 ] && command -v su >/dev/null 2>&1; then
-    ROOT_BINARY_FOUND=1
 fi
 
 SELINUX_MODE="Unknown"
@@ -438,15 +489,14 @@ if command -v getenforce >/dev/null 2>&1; then
 fi
 
 PARTITION_COUNT=0
-if [ "$ROOT_AUDIT" -eq 1 ] || [ "$ROOT_BINARY_FOUND" -eq 1 ]; then
-    if su -c id 2>/dev/null | grep -q "uid=0"; then
+if [ "$ROOT_BINARY_FOUND" -eq 1 ] && [ "$ROOT_AUDIT" -eq 1 ]; then
+    if printf "id\nexit\n" | su 2>/dev/null | grep -q "uid=0"; then
         ROOT_GRANTED=1
-        ROOT_BINARY_FOUND=1
     fi
 fi
 
 if [ "$ROOT_GRANTED" -eq 1 ]; then
-    PARTITION_DATA="$(su -c 'cat /proc/partitions' 2>/dev/null || true)"
+    PARTITION_DATA="$(printf "cat /proc/partitions\nexit\n" | su 2>/dev/null || true)"
 else
     PARTITION_DATA="$(cat /proc/partitions 2>/dev/null || true)"
 fi
@@ -521,14 +571,6 @@ if [ "$DO_STORAGE_TEST" -eq 1 ]; then
     fi
 fi
 
-# Helper for integer-based GB calculation (immune to locale decimal point issues)
-calc_gb() {
-    mb_val="$1"
-    gb_int=$((mb_val / 1024))
-    gb_dec=$(( (mb_val % 1024) * 10 / 1024 ))
-    echo "${gb_int}.${gb_dec}"
-}
-
 # Print Report
 build_report() {
     printf "\n%b%s%b\n" "$COLOR_CYAN" "$(t TITLE)" "$COLOR_RESET"
@@ -556,10 +598,20 @@ build_report() {
     printf "  • %s: %d\n" "$(t CORES_ACTIVE)" "$ACTIVE_CORES"
     printf "%b\n" "$CORE_DETAILS"
 
-    if [ "$DATA_TOTAL_MB" -gt 0 ]; then
+    if [ "$DATA_TOTAL_MB" -gt 0 ] || [ "$TOTAL_FLASH_MB" -gt 0 ]; then
         printf "%b%s%b\n" "$COLOR_BOLD" "$(t STORAGE_INFO)" "$COLOR_RESET"
-        printf "  • %s: %d MB (~%s GB)\n" "$(t STORAGE_TOTAL)" "$DATA_TOTAL_MB" "$(calc_gb "$DATA_TOTAL_MB")"
-        printf "  • %s: %d MB (~%s GB)\n\n" "$(t STORAGE_FREE)" "$DATA_FREE_MB" "$(calc_gb "$DATA_FREE_MB")"
+        if [ "$TOTAL_FLASH_MB" -gt 0 ]; then
+            printf "  • %s: %d MB (~%s GB)\n" "$(t PHYSICAL_FLASH)" "$TOTAL_FLASH_MB" "$(calc_gb "$TOTAL_FLASH_MB")"
+            if [ -n "$FLASH_CHIPS_INFO" ]; then
+                printf "%b" "$FLASH_CHIPS_INFO"
+            fi
+        fi
+        if [ "$DATA_TOTAL_MB" -gt 0 ]; then
+            printf "  • %s: %d MB (~%s GB)\n" "$(t STORAGE_TOTAL)" "$DATA_TOTAL_MB" "$(calc_gb "$DATA_TOTAL_MB")"
+            printf "  • %s: %d MB (~%s GB)\n\n" "$(t STORAGE_FREE)" "$DATA_FREE_MB" "$(calc_gb "$DATA_FREE_MB")"
+        else
+            printf "\n"
+        fi
     fi
 
     printf "%b%s%b\n" "$COLOR_BOLD" "$(t ROOT_INFO)" "$COLOR_RESET"
@@ -643,6 +695,7 @@ if [ -n "$JSON_FILE" ]; then
     "active_cores": $ACTIVE_CORES
   },
   "storage": {
+    "physical_flash_mb": $TOTAL_FLASH_MB,
     "data_total_mb": $DATA_TOTAL_MB,
     "data_free_mb": $DATA_FREE_MB
   },

@@ -3,12 +3,18 @@ package com.gokcank.fakehunter
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,35 +24,54 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gokcank.fakehunter.core.detector.HardwareDetector
+import com.gokcank.fakehunter.core.export.EvidenceCollector
+import com.gokcank.fakehunter.core.model.AuditOptions
 import com.gokcank.fakehunter.core.model.AuditReport
 import com.gokcank.fakehunter.core.model.IssueSeverity
-import com.gokcank.fakehunter.core.model.StorageTestResult
 import com.gokcank.fakehunter.core.model.Verdict
-import com.gokcank.fakehunter.core.storage.StorageTester
+import com.gokcank.fakehunter.core.qr.QrHelper
+import com.gokcank.fakehunter.core.settings.LocaleHelper
+import com.gokcank.fakehunter.core.settings.SettingsManager
 
 class MainActivity : ComponentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        val lang = SettingsManager.getLanguage(newBase)
+        super.attachBaseContext(LocaleHelper.applyLocale(newBase, lang))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
             ModernAppTheme {
-                var report by remember { mutableStateOf(HardwareDetector.performAudit(this@MainActivity)) }
+                var report by remember { mutableStateOf<AuditReport?>(null) }
                 var isInspecting by remember { mutableStateOf(false) }
-                var isStorageTesting by remember { mutableStateOf(false) }
-                var storageTestProgress by remember { mutableStateOf(0) }
-                var storageTestStatus by remember { mutableStateOf("") }
-                var storageTestResult by remember { mutableStateOf<StorageTestResult?>(null) }
+                var progressPercent by remember { mutableStateOf(0) }
+                var progressText by remember { mutableStateOf("") }
+                var currentPhase by remember { mutableStateOf(HardwareDetector.Phase.SYSTEM) }
+                var showAboutDialog by remember { mutableStateOf(false) }
+                var showSettingsDialog by remember { mutableStateOf(false) }
+                var showQrDialog by remember { mutableStateOf(false) }
 
-                fun runInspection(wake: Boolean = false, requestRoot: Boolean = false) {
+                fun runInspection(options: AuditOptions = SettingsManager.getAuditOptions(this@MainActivity)) {
+                    if (isInspecting) return
                     isInspecting = true
+                    progressPercent = 0
                     Thread {
-                        val result = HardwareDetector.performAudit(this@MainActivity, wakeTest = wake, requestRoot = requestRoot)
+                        val result = HardwareDetector.performAudit(this@MainActivity, options) { phase, pct, detail ->
+                            runOnUiThread {
+                                currentPhase = phase
+                                progressPercent = pct
+                                progressText = phaseLabel(phase, detail)
+                            }
+                        }
                         runOnUiThread {
                             report = result
                             isInspecting = false
@@ -54,47 +79,93 @@ class MainActivity : ComponentActivity() {
                     }.start()
                 }
 
-                fun runStorageTest(testMb: Int = 500) {
-                    isStorageTesting = true
-                    storageTestResult = null
-                    storageTestProgress = 0
-                    storageTestStatus = "Initializing..."
-                    Thread {
-                        val result = StorageTester.runVerificationTest(this@MainActivity, testMb = testMb) { pct, msg ->
-                            runOnUiThread {
-                                storageTestProgress = pct
-                                storageTestStatus = msg
+                // Storage Access Framework launcher for saving evidence ZIP
+                val saveLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("application/zip")
+                ) { uri ->
+                    if (uri != null && report != null) {
+                        Thread {
+                            val success = try {
+                                contentResolver.openOutputStream(uri)?.use { os ->
+                                    EvidenceCollector.exportEvidenceZip(this@MainActivity, report!!, os)
+                                } ?: false
+                            } catch (e: Exception) {
+                                false
                             }
-                        }
-                        runOnUiThread {
-                            storageTestResult = result
-                            isStorageTesting = false
-                        }
-                    }.start()
+                            runOnUiThread {
+                                val msg = if (success) {
+                                    getString(R.string.report_saved_success)
+                                } else {
+                                    getString(R.string.report_save_failed)
+                                }
+                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                            }
+                        }.start()
+                    }
+                }
+
+                fun triggerSaveZip() {
+                    val current = report ?: return
+                    val fileName = EvidenceCollector.generateZipFileName(current)
+                    saveLauncher.launch(fileName)
                 }
 
                 fun copyReport() {
+                    val current = report ?: return
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("FakeHunter Report", report.toFormattedPlainText())
+                    val clip = ClipData.newPlainText("FakeHunter Report", current.toFormattedPlainText())
                     clipboard.setPrimaryClip(clip)
                     Toast.makeText(this@MainActivity, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
                 }
 
+                LaunchedEffect(Unit) { runInspection() }
+
                 ModernDashboard(
                     report = report,
                     isInspecting = isInspecting,
-                    isStorageTesting = isStorageTesting,
-                    storageTestProgress = storageTestProgress,
-                    storageTestStatus = storageTestStatus,
-                    storageTestResult = storageTestResult,
-                    onInspect = { runInspection(wake = false) },
-                    onWakeInspect = { runInspection(wake = true) },
-                    onRootInspect = { runInspection(requestRoot = true) },
-                    onRunStorageTest = { runStorageTest(500) },
+                    progressPercent = progressPercent,
+                    progressText = progressText,
+                    onInspect = { runInspection() },
+                    onRootInspect = { runInspection(SettingsManager.getAuditOptions(this@MainActivity).copy(requestRoot = true)) },
+                    onSaveZip = { triggerSaveZip() },
+                    onOpenQr = { showQrDialog = true },
+                    onOpenSettings = { showSettingsDialog = true },
+                    onOpenAbout = { showAboutDialog = true },
                     onCopy = { copyReport() }
                 )
+
+                if (showAboutDialog) {
+                    AboutDialog(onDismiss = { showAboutDialog = false })
+                }
+
+                if (showSettingsDialog) {
+                    SettingsDialog(
+                        context = this@MainActivity,
+                        onDismiss = { showSettingsDialog = false },
+                        onLanguageChanged = {
+                            showSettingsDialog = false
+                            recreate()
+                        }
+                    )
+                }
+
+                if (showQrDialog && report != null) {
+                    QrSummaryDialog(report = report!!, onDismiss = { showQrDialog = false })
+                }
             }
         }
+    }
+
+    private fun phaseLabel(phase: HardwareDetector.Phase, detail: String): String {
+        val base = when (phase) {
+            HardwareDetector.Phase.SYSTEM -> getString(R.string.progress_system)
+            HardwareDetector.Phase.CPU_WAKE -> getString(R.string.progress_cpu)
+            HardwareDetector.Phase.ROOT -> getString(R.string.progress_root)
+            HardwareDetector.Phase.FLASH -> getString(R.string.progress_flash)
+            HardwareDetector.Phase.STORAGE_TEST -> getString(R.string.progress_storage)
+            HardwareDetector.Phase.DONE -> getString(R.string.progress_done)
+        }
+        return if (detail.isNotBlank()) "$base $detail" else base
     }
 }
 
@@ -112,20 +183,19 @@ fun ModernAppTheme(content: @Composable () -> Unit) {
 
 @Composable
 fun ModernDashboard(
-    report: AuditReport,
+    report: AuditReport?,
     isInspecting: Boolean,
-    isStorageTesting: Boolean,
-    storageTestProgress: Int,
-    storageTestStatus: String,
-    storageTestResult: StorageTestResult?,
+    progressPercent: Int,
+    progressText: String,
     onInspect: () -> Unit,
-    onWakeInspect: () -> Unit,
     onRootInspect: () -> Unit,
-    onRunStorageTest: () -> Unit,
+    onSaveZip: () -> Unit,
+    onOpenQr: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenAbout: () -> Unit,
     onCopy: () -> Unit
 ) {
     val scrollState = rememberScrollState()
-    var showAboutDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -135,110 +205,114 @@ fun ModernDashboard(
             .verticalScroll(scrollState)
     ) {
         // Top Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = stringResource(R.string.app_name),
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = stringResource(R.string.app_subtitle),
-                    fontSize = 14.sp,
-                    color = Color(0xFF90A4AE)
-                )
-            }
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(R.string.app_name),
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Text(
+                text = stringResource(R.string.app_subtitle),
+                fontSize = 14.sp,
+                color = Color(0xFF90A4AE)
+            )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Row 1: Main actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Button(
                     onClick = onInspect,
-                    enabled = !isInspecting && !isStorageTesting,
+                    enabled = !isInspecting,
+                    modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
                 ) {
                     Text(
                         text = if (isInspecting) "..." else stringResource(R.string.btn_reinspect),
                         color = Color.Black,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
                     )
                 }
 
-                OutlinedButton(onClick = onCopy) {
-                    Text(text = stringResource(R.string.btn_copy_report), color = Color.White)
+                Button(
+                    onClick = onSaveZip,
+                    enabled = report != null && !isInspecting,
+                    modifier = Modifier.weight(1.2f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D333D))
+                ) {
+                    Text(text = stringResource(R.string.btn_save_report), color = Color(0xFF00E5FF), fontSize = 13.sp)
                 }
 
-                OutlinedButton(onClick = { showAboutDialog = true }) {
-                    Text(text = stringResource(R.string.btn_about), color = Color.White)
+                OutlinedButton(
+                    onClick = onOpenQr,
+                    enabled = report != null && !isInspecting,
+                    modifier = Modifier.weight(0.9f)
+                ) {
+                    Text(text = stringResource(R.string.btn_qr_code), color = Color.White, fontSize = 13.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Row 2: Secondary actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onCopy,
+                    enabled = report != null && !isInspecting,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = stringResource(R.string.btn_copy_report), color = Color.White, fontSize = 12.sp)
+                }
+
+                OutlinedButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = stringResource(R.string.btn_settings), color = Color.White, fontSize = 12.sp)
+                }
+
+                OutlinedButton(
+                    onClick = onOpenAbout,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = stringResource(R.string.btn_about), color = Color.White, fontSize = 12.sp)
                 }
             }
         }
 
-        // About Dialog
-        if (showAboutDialog) {
-            AlertDialog(
-                onDismissRequest = { showAboutDialog = false },
-                title = {
-                    Text(
-                        text = stringResource(R.string.about_title),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
+        // Live progress of the audit chain
+        if (isInspecting) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color(0xFF00E5FF), RoundedCornerShape(12.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1C2026)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(progressText, color = Color(0xFF00E5FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { progressPercent / 100f },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        color = Color(0xFF00E5FF)
                     )
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(R.string.about_version, "1.0.0"),
-                            color = Color(0xFF00E5FF),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
-                        )
-                        Text(
-                            text = stringResource(R.string.about_description),
-                            color = Color(0xFFCFD8DC),
-                            fontSize = 13.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.about_privacy_title),
-                            color = Color(0xFF00E676),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = stringResource(R.string.about_privacy_desc),
-                            color = Color(0xFF90A4AE),
-                            fontSize = 12.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.about_license_text),
-                            color = Color(0xFFCFD8DC),
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            text = stringResource(R.string.about_github_url),
-                            color = Color(0xFF00E5FF),
-                            fontSize = 12.sp
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { showAboutDialog = false },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
-                    ) {
-                        Text(stringResource(R.string.btn_close), color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                },
-                containerColor = Color(0xFF1C2026),
-                shape = RoundedCornerShape(16.dp)
-            )
+                }
+            }
         }
+
+        if (report == null) return@Column
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -330,14 +404,8 @@ fun ModernDashboard(
                 } else {
                     Text("All reported cores verified", color = Color(0xFF00E676), fontSize = 12.sp)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Button(
-                    onClick = onWakeInspect,
-                    modifier = Modifier.height(32.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D333D))
-                ) {
-                    Text("Core Wake Test", fontSize = 11.sp, color = Color.White)
+                if (report.cpu.wakeTestPerformed) {
+                    Text(stringResource(R.string.cpu_wake_done), color = Color(0xFF90A4AE), fontSize = 11.sp)
                 }
             }
 
@@ -347,6 +415,14 @@ fun ModernDashboard(
             ) {
                 Text("Total /data: ${report.storage.totalDataGbFormatted}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Text("Free Space: ${report.storage.freeDataGbFormatted}", color = Color(0xFF90A4AE), fontSize = 12.sp)
+                if (report.storage.flashChips.isNotEmpty()) {
+                    Text(
+                        stringResource(R.string.metric_flash_physical, report.storage.physicalFlashGbFormatted),
+                        color = Color(0xFF00E5FF), fontSize = 12.sp
+                    )
+                } else {
+                    Text(stringResource(R.string.metric_flash_unreadable), color = Color(0xFF90A4AE), fontSize = 12.sp)
+                }
             }
         }
 
@@ -357,7 +433,6 @@ fun ModernDashboard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Root Card
             MetricCard(
                 title = stringResource(R.string.header_root),
                 modifier = Modifier.weight(1f)
@@ -370,57 +445,45 @@ fun ModernDashboard(
                 Text(rootText, color = rootColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Text("SELinux: ${report.root.selinuxMode}", color = Color(0xFF90A4AE), fontSize = 12.sp)
                 if (report.root.rawPartitions.isNotEmpty()) {
-                    Text("Kernel Partitions: ${report.root.rawPartitions.size} devices", color = Color(0xFF00E5FF), fontSize = 12.sp)
+                    Text(stringResource(R.string.root_partitions, report.root.rawPartitions.size), color = Color(0xFF00E5FF), fontSize = 12.sp)
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                Button(
-                    onClick = onRootInspect,
-                    enabled = !isInspecting,
-                    modifier = Modifier.height(32.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D333D))
-                ) {
-                    Text(stringResource(R.string.btn_deep_root_audit), fontSize = 11.sp, color = Color.White)
+                if (report.root.dmesgHighlights.isNotEmpty()) {
+                    Text(stringResource(R.string.root_dmesg_lines, report.root.dmesgHighlights.size), color = Color(0xFF00E5FF), fontSize = 12.sp)
+                }
+                if (report.root.isRootBinaryFound && !report.root.isRootGranted) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Button(
+                        onClick = onRootInspect,
+                        enabled = !isInspecting,
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D333D))
+                    ) {
+                        Text(stringResource(R.string.btn_deep_root_audit), fontSize = 11.sp, color = Color.White)
+                    }
                 }
             }
 
-            // Physical Storage Verification Test Card
             MetricCard(
                 title = stringResource(R.string.header_storage_test),
                 modifier = Modifier.weight(1f)
             ) {
                 Text(stringResource(R.string.storage_test_desc), color = Color(0xFF90A4AE), fontSize = 11.sp)
                 Spacer(modifier = Modifier.height(6.dp))
-
-                if (isStorageTesting) {
-                    LinearProgressIndicator(
-                        progress = { storageTestProgress / 100f },
-                        modifier = Modifier.fillMaxWidth().height(6.dp),
-                        color = Color(0xFF00E5FF)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(storageTestStatus, color = Color(0xFF00E5FF), fontSize = 11.sp)
-                } else {
-                    Button(
-                        onClick = onRunStorageTest,
-                        enabled = !isInspecting,
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
-                    ) {
-                        Text(stringResource(R.string.btn_start_test), fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                val test = report.storageTest
+                when {
+                    test == null -> Unit
+                    test.wasSkipped ->
+                        Text(stringResource(R.string.storage_test_skipped, test.message), color = Color(0xFFFFD600), fontSize = 11.sp)
+                    test.isCorrupted ->
+                        Text(stringResource(R.string.storage_test_failed) + ": " + test.message, color = Color(0xFFFF1744), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    else -> {
+                        Text(stringResource(R.string.storage_test_tested, test.testedMb), color = Color(0xFF90A4AE), fontSize = 11.sp)
+                        Text(
+                            stringResource(R.string.storage_test_passed, test.writeSpeedMbPerSec, test.readSpeedMbPerSec),
+                            color = Color(0xFF00E676), fontSize = 11.sp, fontWeight = FontWeight.Bold
+                        )
                     }
-                }
-
-                if (storageTestResult != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val resColor = if (storageTestResult.isCorrupted) Color(0xFFFF1744) else Color(0xFF00E676)
-                    val resText = if (storageTestResult.isCorrupted) {
-                        stringResource(R.string.storage_test_failed) + ": " + storageTestResult.message
-                    } else {
-                        stringResource(R.string.storage_test_passed, storageTestResult.writeSpeedMbPerSec, storageTestResult.readSpeedMbPerSec)
-                    }
-                    Text(resText, color = resColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -447,6 +510,236 @@ fun ModernDashboard(
             }
         }
     }
+}
+
+@Composable
+fun SettingsDialog(
+    context: Context,
+    onDismiss: () -> Unit,
+    onLanguageChanged: () -> Unit
+) {
+    var selectedLang by remember { mutableStateOf(SettingsManager.getLanguage(context)) }
+    var autoRoot by remember { mutableStateOf(SettingsManager.isAutoRoot(context)) }
+    var storageMb by remember { mutableStateOf(SettingsManager.getStorageTestMb(context)) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.settings_title),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Language
+                Text(text = stringResource(R.string.settings_language), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = selectedLang == SettingsManager.LANG_SYSTEM,
+                        onClick = { selectedLang = SettingsManager.LANG_SYSTEM },
+                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00E5FF))
+                    )
+                    Text(stringResource(R.string.settings_lang_system), color = Color.White, fontSize = 13.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = selectedLang == SettingsManager.LANG_TR,
+                        onClick = { selectedLang = SettingsManager.LANG_TR },
+                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00E5FF))
+                    )
+                    Text(stringResource(R.string.settings_lang_tr), color = Color.White, fontSize = 13.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = selectedLang == SettingsManager.LANG_EN,
+                        onClick = { selectedLang = SettingsManager.LANG_EN },
+                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00E5FF))
+                    )
+                    Text(stringResource(R.string.settings_lang_en), color = Color.White, fontSize = 13.sp)
+                }
+
+                HorizontalDivider(color = Color(0xFF2D333D))
+
+                // Auto Root
+                Text(text = stringResource(R.string.settings_auto_root), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(text = stringResource(R.string.settings_auto_root_desc), color = Color(0xFF90A4AE), fontSize = 11.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = if (autoRoot) "Enabled" else "Disabled", color = Color.White, fontSize = 13.sp)
+                    Switch(
+                        checked = autoRoot,
+                        onCheckedChange = { autoRoot = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00E5FF))
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF2D333D))
+
+                // Storage Test Size
+                Text(text = stringResource(R.string.settings_storage_test), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(text = stringResource(R.string.settings_storage_test_desc), color = Color(0xFF90A4AE), fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(100, 250, 500).forEach { size ->
+                        FilterChip(
+                            selected = storageMb == size,
+                            onClick = { storageMb = size },
+                            label = { Text("$size MB") }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val langChanged = selectedLang != SettingsManager.getLanguage(context)
+                    SettingsManager.setLanguage(context, selectedLang)
+                    SettingsManager.setAutoRoot(context, autoRoot)
+                    SettingsManager.setStorageTestMb(context, storageMb)
+                    if (langChanged) {
+                        onLanguageChanged()
+                    } else {
+                        onDismiss()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
+            ) {
+                Text(stringResource(R.string.btn_close), color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = Color(0xFF1C2026),
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
+fun QrSummaryDialog(
+    report: AuditReport,
+    onDismiss: () -> Unit
+) {
+    val qrText = remember(report) { QrHelper.generateAuditSummary(report) }
+    val qrBitmap = remember(qrText) { QrHelper.generateQrBitmap(qrText, 512) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.qr_dialog_title),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.qr_dialog_desc),
+                    color = Color(0xFF90A4AE),
+                    fontSize = 12.sp
+                )
+                if (qrBitmap != null) {
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = "QR Code",
+                        modifier = Modifier
+                            .size(260.dp)
+                            .background(Color.White, RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    )
+                } else {
+                    Text("Error generating QR", color = Color(0xFFFF1744))
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
+            ) {
+                Text(stringResource(R.string.btn_close), color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = Color(0xFF1C2026),
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
+fun AboutDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.about_title),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
+                    color = Color(0xFF00E5FF),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+                Text(
+                    text = stringResource(R.string.about_description),
+                    color = Color(0xFFCFD8DC),
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.about_privacy_title),
+                    color = Color(0xFF00E676),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = stringResource(R.string.about_privacy_desc),
+                    color = Color(0xFF90A4AE),
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.about_license_text),
+                    color = Color(0xFFCFD8DC),
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = stringResource(R.string.about_github_url),
+                    color = Color(0xFF00E5FF),
+                    fontSize = 12.sp
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
+            ) {
+                Text(stringResource(R.string.btn_close), color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = Color(0xFF1C2026),
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable

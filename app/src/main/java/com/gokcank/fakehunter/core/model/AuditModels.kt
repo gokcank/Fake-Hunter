@@ -18,6 +18,13 @@ data class AuditIssue(
     val description: String
 )
 
+/** Options for a full audit run. Every test runs by default. */
+data class AuditOptions(
+    val wakeTest: Boolean = true,
+    val requestRoot: Boolean = true,
+    val storageTestMb: Int = 100
+)
+
 data class SystemInfo(
     val model: String,
     val manufacturer: String,
@@ -35,10 +42,10 @@ data class RamInfo(
     val isSwapInflated: Boolean
 ) {
     val physicalGbFormatted: String
-        get() = String.format("%.1f GB", physicalMb / 1024.0)
+        get() = formatGb(physicalMb)
 
     val swapGbFormatted: String
-        get() = String.format("%.1f GB", swapMb / 1024.0)
+        get() = formatGb(swapMb)
 }
 
 data class CoreDetail(
@@ -52,18 +59,37 @@ data class CpuInfo(
     val reportedCores: Int,
     val activeCores: Int,
     val coreDetails: List<CoreDetail>,
-    val isFakeCoresDetected: Boolean
+    val isFakeCoresDetected: Boolean,
+    val wakeTestPerformed: Boolean = false
 )
+
+/** A whole physical block device (eMMC / UFS / NAND / virtio) as seen by the kernel. */
+data class FlashChip(
+    val name: String,
+    val sizeMb: Long,
+    val readViaRoot: Boolean
+) {
+    val sizeGbFormatted: String
+        get() = formatGb(sizeMb)
+}
 
 data class StorageInfo(
     val totalDataMb: Long,
-    val freeDataMb: Long
+    val freeDataMb: Long,
+    val flashChips: List<FlashChip> = emptyList(),
+    val flashChipsComplete: Boolean = false
 ) {
     val totalDataGbFormatted: String
-        get() = String.format("%.1f GB", totalDataMb / 1024.0)
+        get() = formatGb(totalDataMb)
 
     val freeDataGbFormatted: String
-        get() = String.format("%.1f GB", freeDataMb / 1024.0)
+        get() = formatGb(freeDataMb)
+
+    val physicalFlashMb: Long
+        get() = flashChips.sumOf { it.sizeMb }
+
+    val physicalFlashGbFormatted: String
+        get() = formatGb(physicalFlashMb)
 }
 
 data class RootInfo(
@@ -71,7 +97,8 @@ data class RootInfo(
     val isRootGranted: Boolean,
     val selinuxMode: String,
     val rawPartitions: List<String>,
-    val dmesgHighlights: List<String>
+    val dmesgHighlights: List<String>,
+    val rootRequested: Boolean = false
 )
 
 data class StorageTestResult(
@@ -80,7 +107,10 @@ data class StorageTestResult(
     val readSpeedMbPerSec: Double,
     val isCorrupted: Boolean,
     val message: String
-)
+) {
+    val wasSkipped: Boolean
+        get() = testedMb == 0 && !isCorrupted
+}
 
 data class AuditReport(
     val system: SystemInfo,
@@ -88,22 +118,66 @@ data class AuditReport(
     val cpu: CpuInfo,
     val storage: StorageInfo,
     val root: RootInfo,
+    val storageTest: StorageTestResult?,
     val verdict: Verdict,
-    val issues: List<AuditIssue>
+    val issues: List<AuditIssue>,
+    val timestampMillis: Long = System.currentTimeMillis()
 ) {
     fun toFormattedPlainText(): String {
         val sb = StringBuilder()
         sb.appendLine("=== FAKE HUNTER HARDWARE AUDIT REPORT ===")
+        sb.appendLine("Date: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(timestampMillis))}")
         sb.appendLine("Verdict: ${verdict.name}")
+        sb.appendLine()
+        sb.appendLine("[System]")
         sb.appendLine("Model: ${system.model} (${system.manufacturer})")
-        sb.appendLine("Platform: ${system.platform} | Board: ${system.board}")
+        sb.appendLine("Platform: ${system.platform} | Board: ${system.board} | Hardware: ${system.hardware}")
         sb.appendLine("Android: ${system.reportedRelease} (API ${system.actualSdkLevel})")
-        sb.appendLine("RAM: ${ram.physicalGbFormatted} | Swap: ${ram.swapGbFormatted} (Inflated: ${ram.isSwapInflated})")
-        sb.appendLine("CPU Cores: ${cpu.reportedCores} reported / ${cpu.activeCores} active")
-        sb.appendLine("Storage (/data): ${storage.totalDataGbFormatted} (Free: ${storage.freeDataGbFormatted})")
-        sb.appendLine("Root Access: Granted=${root.isRootGranted} (Binary=${root.isRootBinaryFound}, SELinux=${root.selinuxMode})")
+        sb.appendLine("Build: ${system.displayId}")
+        sb.appendLine()
+        sb.appendLine("[Memory]")
+        sb.appendLine("Physical RAM: ${ram.physicalGbFormatted} (${ram.physicalMb} MB)")
+        sb.appendLine("Swap / ZRAM: ${ram.swapGbFormatted} (${ram.swapMb} MB) | Inflated: ${ram.isSwapInflated}")
+        sb.appendLine()
+        sb.appendLine("[CPU]")
+        sb.appendLine("Cores: ${cpu.reportedCores} reported / ${cpu.activeCores} active (wake test: ${cpu.wakeTestPerformed})")
+        cpu.coreDetails.forEach { core ->
+            sb.appendLine("  Core ${core.index}: online=${core.isOnline}, cur=${core.currentFreqMhz} MHz, max=${core.maxFreqMhz} MHz")
+        }
+        sb.appendLine()
+        sb.appendLine("[Storage]")
+        sb.appendLine("/data total: ${storage.totalDataGbFormatted} | free: ${storage.freeDataGbFormatted}")
+        if (storage.flashChips.isNotEmpty()) {
+            sb.appendLine("Physical flash (raw): ${storage.physicalFlashGbFormatted} (complete: ${storage.flashChipsComplete})")
+            storage.flashChips.forEach { chip ->
+                sb.appendLine("  ${chip.name}: ${chip.sizeGbFormatted} (${chip.sizeMb} MB)${if (chip.readViaRoot) " [root]" else ""}")
+            }
+        } else {
+            sb.appendLine("Physical flash (raw): not readable")
+        }
+        sb.appendLine()
+        sb.appendLine("[Storage Verification Test]")
+        if (storageTest == null) {
+            sb.appendLine("Not performed")
+        } else {
+            sb.appendLine("Tested: ${storageTest.testedMb} MB | Write: ${storageTest.writeSpeedMbPerSec} MB/s | Read: ${storageTest.readSpeedMbPerSec} MB/s")
+            sb.appendLine("Corrupted: ${storageTest.isCorrupted} | ${storageTest.message}")
+        }
+        sb.appendLine()
+        sb.appendLine("[Root & Kernel]")
+        sb.appendLine("Root requested: ${root.rootRequested} | Binary: ${root.isRootBinaryFound} | Granted: ${root.isRootGranted}")
+        sb.appendLine("SELinux: ${root.selinuxMode}")
+        if (root.rawPartitions.isNotEmpty()) {
+            sb.appendLine("Kernel partitions (${root.rawPartitions.size}):")
+            root.rawPartitions.forEach { sb.appendLine("  $it") }
+        }
+        if (root.dmesgHighlights.isNotEmpty()) {
+            sb.appendLine("dmesg highlights:")
+            root.dmesgHighlights.forEach { sb.appendLine("  $it") }
+        }
         if (issues.isNotEmpty()) {
-            sb.appendLine("\nFindings:")
+            sb.appendLine()
+            sb.appendLine("[Findings]")
             issues.forEach { issue ->
                 sb.appendLine("[${issue.severity.name}] ${issue.title}: ${issue.description}")
             }
@@ -111,3 +185,5 @@ data class AuditReport(
         return sb.toString()
     }
 }
+
+private fun formatGb(mb: Long): String = String.format(java.util.Locale.US, "%.1f GB", mb / 1024.0)

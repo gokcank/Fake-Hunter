@@ -43,10 +43,42 @@
     <!-- Storage Verification Test -->
     <string name="header_storage_test">Physical Storage Verification</string>
     <string name="storage_test_desc">Writes and reads test blocks to expose fake flash memory.</string>
-    <string name="btn_start_test">Start Test (500 MB)</string>
-    <string name="testing_in_progress">Testing storage...</string>
     <string name="storage_test_passed">Verification PASSED (%1$.1f MB/s W, %2$.1f MB/s R)</string>
     <string name="storage_test_failed">CORRUPTION DETECTED!</string>
+    <string name="storage_test_skipped">Test skipped: %1$s</string>
+    <string name="storage_test_running">Test running…</string>
+    <string name="storage_test_tested">Tested size: %1$d MB</string>
+    <string name="metric_flash_physical">Physical flash chip: %1$s</string>
+    <string name="metric_flash_unreadable">Physical flash chip: not readable</string>
+    <string name="root_partitions">Kernel partitions: %1$d</string>
+    <string name="root_dmesg_lines">Kernel log lines: %1$d</string>
+    <string name="cpu_wake_done">Core wake test performed</string>
+
+    <!-- Audit progress -->
+    <string name="progress_system">Reading system identity and memory…</string>
+    <string name="progress_cpu">Waking CPU cores…</string>
+    <string name="progress_root">Checking root access (answer the popup if shown)…</string>
+    <string name="progress_flash">Reading physical flash chip size…</string>
+    <string name="progress_storage">Storage verification test…</string>
+    <string name="progress_done">Audit complete</string>
+
+    <!-- Settings, Save & QR -->
+    <string name="btn_save_report">Save Evidence (ZIP)</string>
+    <string name="btn_qr_code">QR Code</string>
+    <string name="btn_settings">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_lang_system">System Default</string>
+    <string name="settings_lang_tr">Türkçe</string>
+    <string name="settings_lang_en">English</string>
+    <string name="settings_auto_root">Auto Root Request</string>
+    <string name="settings_auto_root_desc">Prompt for root access during audit if su binary is found</string>
+    <string name="settings_storage_test">Storage Test Size</string>
+    <string name="settings_storage_test_desc">Block size for physical flash integrity test</string>
+    <string name="qr_dialog_title">Audit Summary QR</string>
+    <string name="qr_dialog_desc">Scan with any phone camera to transfer this report</string>
+    <string name="report_saved_success">Evidence ZIP saved successfully</string>
+    <string name="report_save_failed">Failed to save evidence ZIP</string>
 
     <!-- About Dialog -->
     <string name="btn_about">About</string>

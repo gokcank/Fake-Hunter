@@ -7,18 +7,55 @@ import android.os.StatFs
 import com.gokcank.fakehunter.core.model.*
 import com.gokcank.fakehunter.core.root.RootHelper
 import com.gokcank.fakehunter.core.safeRun
+import com.gokcank.fakehunter.core.storage.StorageTester
 import java.io.File
 
 object HardwareDetector {
 
-    fun performAudit(context: Context, wakeTest: Boolean = false, requestRoot: Boolean = false): AuditReport {
+    /** Phases reported to the UI while the full audit chain runs. */
+    enum class Phase { SYSTEM, CPU_WAKE, ROOT, FLASH, STORAGE_TEST, DONE }
+
+    /**
+     * Runs the full audit chain: identity, RAM, CPU (with wake test), root,
+     * raw flash size and the physical storage verification test.
+     * Must be called off the main thread.
+     */
+    fun performAudit(
+        context: Context,
+        options: AuditOptions = AuditOptions(),
+        onProgress: (phase: Phase, percent: Int, detail: String) -> Unit = { _, _, _ -> }
+    ): AuditReport {
         val issues = mutableListOf<AuditIssue>()
 
+        onProgress(Phase.SYSTEM, 0, "")
         val systemInfo = detectSystemInfo()
         val ramInfo = detectRamInfo(issues)
-        val cpuInfo = detectCpuInfo(issues, wakeTest)
-        val storageInfo = detectStorageInfo(issues)
-        val rootInfo = RootHelper.inspectRoot(requestRootElevation = requestRoot)
+
+        onProgress(Phase.CPU_WAKE, 5, "")
+        val cpuInfo = detectCpuInfo(issues, options.wakeTest)
+
+        onProgress(Phase.ROOT, 15, "")
+        val rootInfo = RootHelper.inspectRoot(requestRootElevation = options.requestRoot)
+
+        onProgress(Phase.FLASH, 30, "")
+        val storageInfo = detectStorageInfo(issues, useRoot = rootInfo.isRootGranted)
+
+        var storageTest: StorageTestResult? = null
+        if (options.storageTestMb > 0) {
+            onProgress(Phase.STORAGE_TEST, 35, "")
+            storageTest = StorageTester.runVerificationTest(context, options.storageTestMb) { pct, msg ->
+                onProgress(Phase.STORAGE_TEST, 35 + (pct * 65) / 100, msg)
+            }
+            if (storageTest.isCorrupted) {
+                issues.add(
+                    AuditIssue(
+                        severity = IssueSeverity.FAKE,
+                        title = "Storage Verification Failed",
+                        description = storageTest.message
+                    )
+                )
+            }
+        }
 
         checkKnownFraudSignatures(systemInfo, issues)
         checkAndroidVersionSpoofing(systemInfo, issues)
@@ -29,12 +66,14 @@ object HardwareDetector {
             else -> Verdict.VERIFIED
         }
 
+        onProgress(Phase.DONE, 100, "")
         return AuditReport(
             system = systemInfo,
             ram = ramInfo,
             cpu = cpuInfo,
             storage = storageInfo,
             root = rootInfo,
+            storageTest = storageTest,
             verdict = verdict,
             issues = issues
         )
@@ -189,11 +228,12 @@ object HardwareDetector {
             reportedCores = reportedCores,
             activeCores = activeCores,
             coreDetails = details,
-            isFakeCoresDetected = isFakeCoresDetected
+            isFakeCoresDetected = isFakeCoresDetected,
+            wakeTestPerformed = wakeTest
         )
     }
 
-    private fun detectStorageInfo(issues: MutableList<AuditIssue>): StorageInfo {
+    private fun detectStorageInfo(issues: MutableList<AuditIssue>, useRoot: Boolean): StorageInfo {
         var totalMb = 0L
         var freeMb = 0L
 
@@ -208,10 +248,74 @@ object HardwareDetector {
             freeMb = (freeBlocks * blockSize) / (1024 * 1024)
         }
 
+        val (chips, complete) = detectFlashChips(useRoot)
+
+        // A partition can never be larger than the physical chips it lives on.
+        val physicalMb = chips.sumOf { it.sizeMb }
+        if (complete && physicalMb > 0 && totalMb > physicalMb + physicalMb / 50) {
+            issues.add(
+                AuditIssue(
+                    severity = IssueSeverity.FAKE,
+                    title = "Storage Size Spoofed",
+                    description = "The /data partition reports ${totalMb}MB, but the physical flash chip(s) only hold ${physicalMb}MB."
+                )
+            )
+        }
+
         return StorageInfo(
             totalDataMb = totalMb,
-            freeDataMb = freeMb
+            freeDataMb = freeMb,
+            flashChips = chips,
+            flashChipsComplete = complete
         )
+    }
+
+    private val NON_FLASH_PREFIXES = listOf("loop", "ram", "zram", "dm-", "md", "sr", "nbd", "vnd", "fd")
+
+    /**
+     * Reads the raw sector count of every whole block device from /sys/block/<dev>/size
+     * (512-byte sectors). Tries without root first, then with root if granted.
+     * Returns the chips and whether every candidate device could be read.
+     */
+    private fun detectFlashChips(useRoot: Boolean): Pair<List<FlashChip>, Boolean> {
+        val chips = mutableListOf<FlashChip>()
+        var complete = true
+
+        val names = safeRun("FlashList", emptyList<String>()) {
+            File("/sys/block").list()?.toList() ?: emptyList()
+        }.ifEmpty {
+            if (useRoot) {
+                RootHelper.executeRootCommand("ls /sys/block")
+                    ?.lineSequence()?.map { it.trim() }?.filter { it.isNotEmpty() }?.toList()
+                    ?: emptyList()
+            } else emptyList()
+        }
+
+        val candidates = names.filter { name ->
+            NON_FLASH_PREFIXES.none { name.startsWith(it) } &&
+                !name.contains("boot") && !name.contains("rpmb")
+        }.sorted()
+
+        if (candidates.isEmpty()) return Pair(emptyList(), false)
+
+        for (name in candidates) {
+            var viaRoot = false
+            var sectors = safeRun("FlashSize", 0L) {
+                File("/sys/block/$name/size").readText().trim().toLongOrNull() ?: 0L
+            }
+            if (sectors == 0L && useRoot) {
+                sectors = RootHelper.executeRootCommand("cat /sys/block/$name/size")
+                    ?.trim()?.toLongOrNull() ?: 0L
+                viaRoot = sectors > 0L
+            }
+            if (sectors > 0L) {
+                chips.add(FlashChip(name = name, sizeMb = (sectors * 512L) / (1024L * 1024L), readViaRoot = viaRoot))
+            } else {
+                complete = false
+            }
+        }
+
+        return Pair(chips, complete && chips.isNotEmpty())
     }
 
     private fun checkKnownFraudSignatures(system: SystemInfo, issues: MutableList<AuditIssue>) {

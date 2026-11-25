@@ -43,10 +43,42 @@
     <!-- Depolama Doğrulama Testi -->
     <string name="header_storage_test">Fiziksel Hafıza Doğrulama Testi</string>
     <string name="storage_test_desc">Sahte hafıza çiplerini ifşa etmek için test blokları yazıp doğrular.</string>
-    <string name="btn_start_test">Testi Başlat (500 MB)</string>
-    <string name="testing_in_progress">Hafıza test ediliyor...</string>
     <string name="storage_test_passed">Doğrulama BAŞARILI (%1$.1f MB/s Y, %2$.1f MB/s O)</string>
     <string name="storage_test_failed">VERİ BOZULMASI TESPİT EDİLDİ!</string>
+    <string name="storage_test_skipped">Test yapılamadı: %1$s</string>
+    <string name="storage_test_running">Test sürüyor…</string>
+    <string name="storage_test_tested">Test boyutu: %1$d MB</string>
+    <string name="metric_flash_physical">Fiziksel hafıza çipi: %1$s</string>
+    <string name="metric_flash_unreadable">Fiziksel hafıza çipi: okunamadı</string>
+    <string name="root_partitions">Çekirdek bölümleri: %1$d</string>
+    <string name="root_dmesg_lines">Çekirdek günlüğü satırı: %1$d</string>
+    <string name="cpu_wake_done">Çekirdek uyandırma testi yapıldı</string>
+
+    <!-- Teftiş ilerlemesi -->
+    <string name="progress_system">Sistem kimliği ve bellek okunuyor…</string>
+    <string name="progress_cpu">İşlemci çekirdekleri uyandırılıyor…</string>
+    <string name="progress_root">Root erişimi kontrol ediliyor (çıkarsa izin penceresini yanıtlayın)…</string>
+    <string name="progress_flash">Fiziksel hafıza çipi boyutu okunuyor…</string>
+    <string name="progress_storage">Hafıza doğrulama testi…</string>
+    <string name="progress_done">Teftiş tamamlandı</string>
+
+    <!-- Ayarlar, Kayıt & QR -->
+    <string name="btn_save_report">Raporu Kaydet (ZIP)</string>
+    <string name="btn_qr_code">QR Kod</string>
+    <string name="btn_settings">Ayarlar</string>
+    <string name="settings_title">Ayarlar</string>
+    <string name="settings_language">Uygulama Dili</string>
+    <string name="settings_lang_system">Sistem Varsayılanı</string>
+    <string name="settings_lang_tr">Türkçe</string>
+    <string name="settings_lang_en">English</string>
+    <string name="settings_auto_root">Otomatik Root İsteme</string>
+    <string name="settings_auto_root_desc">Cihazda su ikili dosyası varsa teftiş sırasında otomatik yetki iste</string>
+    <string name="settings_storage_test">Depolama Test Boyutu</string>
+    <string name="settings_storage_test_desc">Fiziksel hafıza doğrulama test boyutu</string>
+    <string name="qr_dialog_title">Teftiş Özeti QR</string>
+    <string name="qr_dialog_desc">Raporu telefonuna aktarmak için kamerayla tara</string>
+    <string name="report_saved_success">Adli teftiş arşivi başarıyla kaydedildi</string>
+    <string name="report_save_failed">Arşiv kaydedilemedi</string>
 
     <!-- Hakkında Penceresi -->
     <string name="btn_about">Hakkında</string>

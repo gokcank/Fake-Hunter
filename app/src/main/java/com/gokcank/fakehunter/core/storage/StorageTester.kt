@@ -15,7 +15,7 @@ object StorageTester {
 
     fun runVerificationTest(
         context: Context,
-        testMb: Int = 500,
+        testMb: Int = 100,
         onProgress: (percent: Int, statusText: String) -> Unit
     ): StorageTestResult {
         val targetDir = context.getExternalFilesDir(null) ?: context.filesDir

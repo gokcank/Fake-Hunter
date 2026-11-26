@@ -4,7 +4,6 @@
     android:id="@+id/svRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/surface_dark"
     android:fillViewport="true">
 
     <LinearLayout
@@ -624,7 +623,7 @@
                             android:layout_marginTop="2dp"
                             android:text="@string/storage_test_cache_note"
                             android:textColor="@color/text_secondary"
-                            android:textSize="10sp"
+                            android:textSize="11sp"
                             android:visibility="gone" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>

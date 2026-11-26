@@ -399,7 +399,7 @@ class MainActivity : AppCompatActivity(), AuditCoordinator.Listener {
         val rgStorage = RadioGroup(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(100, 250, 500).forEach { size ->
             val rb = RadioButton(this).apply {
-                text = "$size MB"
+                text = getString(R.string.settings_storage_mb_option, size)
                 setTextColor(Color.WHITE)
                 buttonTintList = cyanCsl
                 isChecked = storageMb == size
@@ -583,7 +583,7 @@ class MainActivity : AppCompatActivity(), AuditCoordinator.Listener {
                 binding.tvStorageTestCacheNote.visibility = View.GONE
                 binding.tvStorageTestResult.visibility = View.VISIBLE
                 binding.tvStorageTestResult.setTextColor(Color.parseColor("#FF1744"))
-                binding.tvStorageTestResult.text = "${getString(R.string.storage_test_failed)}: ${test.message}"
+                binding.tvStorageTestResult.text = getString(R.string.storage_test_failed, test.message)
             }
             else -> {
                 binding.tvStorageTestSize.visibility = View.VISIBLE

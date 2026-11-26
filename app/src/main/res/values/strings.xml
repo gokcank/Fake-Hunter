@@ -53,7 +53,7 @@
     <string name="header_storage_test">Physical Storage Verification</string>
     <string name="storage_test_desc">Writes and reads test blocks to expose fake flash memory.</string>
     <string name="storage_test_passed">Verification PASSED (%1$.1f MB/s W, %2$.1f MB/s R)</string>
-    <string name="storage_test_failed">CORRUPTION DETECTED!</string>
+    <string name="storage_test_failed">CORRUPTION DETECTED: %1$s</string>
     <string name="storage_test_skipped">Test skipped: %1$s</string>
     <string name="storage_test_error">Test interrupted (I/O error): %1$s</string>
     <string name="storage_test_cache_note">Note: Test size is smaller than RAM; read speed may reflect OS cache.</string>
@@ -91,6 +91,7 @@
     <string name="settings_state_disabled">Disabled</string>
     <string name="settings_storage_test">Storage Test Size</string>
     <string name="settings_storage_test_desc">Block size for physical flash integrity test</string>
+    <string name="settings_storage_mb_option">%1$d MB</string>
     <string name="qr_dialog_title">Audit Summary QR</string>
     <string name="qr_dialog_desc">Scan with any phone camera to transfer this report</string>
     <string name="qr_generating">Generating QR code…</string>

@@ -7,7 +7,5 @@
     <color name="card_stroke">#FF2D333D</color>
     <color name="primary_accent">#FF00E5FF</color>
     <color name="status_green">#FF00E676</color>
-    <color name="status_yellow">#FFFFD600</color>
-    <color name="status_red">#FFFF1744</color>
     <color name="text_secondary">#FF90A4AE</color>
 </resources>

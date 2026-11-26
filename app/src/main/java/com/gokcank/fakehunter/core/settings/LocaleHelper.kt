@@ -1,5 +1,6 @@
 package com.gokcank.fakehunter.core.settings
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
 import android.content.res.Resources
@@ -11,6 +12,7 @@ import java.util.Locale
 object LocaleHelper {
 
     /** Captured once before any in-app locale override mutates Locale.getDefault(). */
+    @SuppressLint("ConstantLocale")
     private val initialSystemLocale: Locale = Locale.getDefault()
 
     fun resolveTargetLocale(langCode: String, systemLocaleProvider: () -> Locale = ::getDeviceSystemLocale): Locale {

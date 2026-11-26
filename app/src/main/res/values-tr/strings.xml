@@ -53,7 +53,7 @@
     <string name="header_storage_test">Fiziksel Hafıza Doğrulama Testi</string>
     <string name="storage_test_desc">Sahte hafıza çiplerini ifşa etmek için test blokları yazıp doğrular.</string>
     <string name="storage_test_passed">Doğrulama BAŞARILI (%1$.1f MB/s Y, %2$.1f MB/s O)</string>
-    <string name="storage_test_failed">VERİ BOZULMASI TESPİT EDİLDİ!</string>
+    <string name="storage_test_failed">VERİ BOZULMASI TESPİT EDİLDİ: %1$s</string>
     <string name="storage_test_skipped">Test yapılamadı: %1$s</string>
     <string name="storage_test_error">Test tamamlanamadı (G/Ç hatası): %1$s</string>
     <string name="storage_test_cache_note">Not: Test boyutu RAM\'den küçük; okuma hızı kısmen sistem önbelleğinden etkilenebilir.</string>
@@ -91,6 +91,7 @@
     <string name="settings_state_disabled">Kapalı</string>
     <string name="settings_storage_test">Depolama Test Boyutu</string>
     <string name="settings_storage_test_desc">Fiziksel hafıza doğrulama test boyutu</string>
+    <string name="settings_storage_mb_option">%1$d MB</string>
     <string name="qr_dialog_title">Teftiş Özeti QR</string>
     <string name="qr_dialog_desc">Raporu telefonuna aktarmak için kamerayla tara</string>
     <string name="qr_generating">QR kod hazırlanıyor…</string>

@@ -520,7 +520,7 @@ fun ModernDashboard(
                     test.wasSkipped ->
                         Text(stringResource(R.string.storage_test_skipped, test.message), color = Color(0xFFFFD600), fontSize = 11.sp)
                     test.isCorrupted ->
-                        Text(stringResource(R.string.storage_test_failed) + ": " + test.message, color = Color(0xFFFF1744), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.storage_test_failed, test.message), color = Color(0xFFFF1744), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     else -> {
                         Text(stringResource(R.string.storage_test_tested, test.testedMb), color = Color(0xFF90A4AE), fontSize = 11.sp)
                         Text(
@@ -528,7 +528,7 @@ fun ModernDashboard(
                             color = Color(0xFF00E676), fontSize = 11.sp, fontWeight = FontWeight.Bold
                         )
                         if (test.cacheWarning) {
-                            Text(stringResource(R.string.storage_test_cache_note), color = Color(0xFF90A4AE), fontSize = 10.sp)
+                            Text(stringResource(R.string.storage_test_cache_note), color = Color(0xFF90A4AE), fontSize = 11.sp)
                         }
                     }
                 }
@@ -607,7 +607,7 @@ fun SettingsDialog(
 ) {
     var selectedLang by remember { mutableStateOf(SettingsManager.getLanguage(context)) }
     var autoRoot by remember { mutableStateOf(SettingsManager.isAutoRoot(context)) }
-    var storageMb by remember { mutableStateOf(SettingsManager.getStorageTestMb(context)) }
+    var storageMb by remember { mutableIntStateOf(SettingsManager.getStorageTestMb(context)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -723,7 +723,7 @@ fun SettingsDialog(
                         FilterChip(
                             selected = storageMb == size,
                             onClick = { storageMb = size },
-                            label = { Text("$size MB") }
+                            label = { Text(stringResource(R.string.settings_storage_mb_option, size)) }
                         )
                     }
                 }

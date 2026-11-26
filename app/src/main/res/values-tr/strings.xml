@@ -2,32 +2,38 @@
 <resources>
     <string name="app_name">Fake Hunter</string>
     <string name="app_subtitle">Donanım Doğrulama Araç Seti</string>
-    <string name="btn_inspect">Donanımı Teftiş Et</string>
     <string name="btn_reinspect">Tekrar Teftiş Et</string>
     <string name="btn_copy_report">Raporu Kopyala</string>
     <string name="copied_to_clipboard">Rapor panoya kopyalandı</string>
-    
+
     <!-- Durum -->
     <string name="status_clean">DOĞRULANDI</string>
     <string name="status_suspicious">ŞÜPHELİ</string>
     <string name="status_fake">SAHTE DONANIM TESPİT EDİLDİ</string>
-    
+    <string name="issues_count_label">Sorun: %1$d</string>
+    <string name="findings_header">Bulgular</string>
+
     <!-- Başlıklar -->
     <string name="header_system">Sistem Kimliği</string>
     <string name="header_memory">Bellek (RAM ve Takas)</string>
     <string name="header_cpu">İşlemci (Çekirdekler)</string>
     <string name="header_storage">Depolama (Kullanıcı ROM)</string>
-    
+
     <!-- Metrikler -->
-    <string name="metric_model">Model: %1$s</string>
-    <string name="metric_platform">Yonga Seti / Anakart: %1$s</string>
-    <string name="metric_android">Android %1$s (API %2$d)</string>
+    <string name="metric_model">Model: %1$s (%2$s)</string>
+    <string name="metric_board">Anakart: %1$s</string>
+    <string name="metric_platform">Platform: %1$s</string>
+    <string name="metric_android">Android: %1$s (API %2$d)</string>
     <string name="metric_ram_physical">Fiziksel RAM: %1$s</string>
     <string name="metric_ram_swap">Takas / ZRAM: %1$s</string>
-    <string name="metric_cores">Çekirdek: %1$d bildirilen / %2$d aktif</string>
-    <string name="metric_storage">Toplam /data: %1$s (Boş: %2$s)</string>
-    
-    <!-- Uyarılar -->
+    <string name="metric_cores">Bildirilen: %1$d | Aktif: %2$d</string>
+    <string name="metric_cpu_max_freq">Azami hız: %1$d MHz</string>
+    <string name="metric_storage_total">Toplam /data: %1$s</string>
+    <string name="metric_storage_free">Boş Alan: %1$s</string>
+    <string name="metric_chip_detail">Çipler: %1$s</string>
+    <string name="metric_selinux">SELinux: %1$s</string>
+
+    <!-- Uyarılar ve Durum Etiketleri -->
     <string name="warn_swap_inflated">Yüksek takas / sanal RAM alanı tespit edildi!</string>
     <string name="warn_ram_spoofed">Bildirilen RAM çekirdek fiziksel belleğiyle uyuşmuyor!</string>
     <string name="ram_virtual_active">Sanal RAM / ZRAM etkin (fiziksel belleği baz alın)</string>
@@ -35,8 +41,6 @@
     <string name="warn_cores_fake">Bildirilen bazı çekirdekler frekans üretmiyor!</string>
     <string name="cpu_cores_verified">Bildirilen tüm çekirdekler doğrulandı</string>
     <string name="cpu_freq_unreadable">Çekirdek frekansları okunamadı (sistem izni kısıtı)</string>
-    <string name="warn_android_spoofed">Görünen Android sürümü sahte!</string>
-    <string name="warn_known_fake">Bilinen sahte yonga seti kimliği tespit edildi!</string>
 
     <!-- Root ve Güvenlik -->
     <string name="header_root">Root ve Çekirdek Güvenliği</string>
@@ -53,7 +57,6 @@
     <string name="storage_test_skipped">Test yapılamadı: %1$s</string>
     <string name="storage_test_error">Test tamamlanamadı (G/Ç hatası): %1$s</string>
     <string name="storage_test_cache_note">Not: Test boyutu RAM\'den küçük; okuma hızı kısmen sistem önbelleğinden etkilenebilir.</string>
-    <string name="storage_test_running">Test sürüyor…</string>
     <string name="storage_test_tested">Test boyutu: %1$d MB</string>
     <string name="metric_flash_physical">Fiziksel hafıza çipi: %1$s</string>
     <string name="metric_flash_unreadable">Fiziksel hafıza çipi: okunamadı</string>
@@ -62,18 +65,21 @@
     <string name="root_dmesg_lines">Çekirdek günlüğü satırı: %1$d</string>
     <string name="cpu_wake_done">Çekirdek uyandırma testi yapıldı</string>
 
-    <!-- Teftiş ilerlemesi -->
+    <!-- Teftiş İlerlemesi -->
     <string name="progress_system">Sistem kimliği ve bellek okunuyor…</string>
     <string name="progress_cpu">İşlemci çekirdekleri uyandırılıyor…</string>
-    <string name="progress_root">Root erişimi kontrol ediliyor (çıkarsa izin penceresini yanıtlayın)…</string>
+    <string name="progress_root">Root yetkisi kontrol ediliyor (açılırsa onaylayın)…</string>
     <string name="progress_flash">Fiziksel hafıza çipi boyutu okunuyor…</string>
-    <string name="progress_storage">Hafıza doğrulama testi…</string>
+    <string name="progress_storage">Depolama doğrulama testi…</string>
     <string name="progress_done">Teftiş tamamlandı</string>
 
-    <!-- Ayarlar, Kayıt & QR -->
+    <!-- Ayarlar, Kayıt ve QR -->
     <string name="btn_save_report">Raporu Kaydet (ZIP)</string>
+    <string name="btn_saving_report">Kaydediliyor…</string>
     <string name="btn_qr_code">QR Kod</string>
     <string name="btn_settings">Ayarlar</string>
+    <string name="btn_save">Kaydet</string>
+    <string name="btn_cancel">İptal</string>
     <string name="settings_title">Ayarlar</string>
     <string name="settings_language">Uygulama Dili</string>
     <string name="settings_lang_system">Sistem Varsayılanı</string>
@@ -87,7 +93,12 @@
     <string name="settings_storage_test_desc">Fiziksel hafıza doğrulama test boyutu</string>
     <string name="qr_dialog_title">Teftiş Özeti QR</string>
     <string name="qr_dialog_desc">Raporu telefonuna aktarmak için kamerayla tara</string>
+    <string name="qr_generating">QR kod hazırlanıyor…</string>
+    <string name="qr_error_failed">QR kod oluşturulamadı</string>
+    <string name="cd_qr_code">Teftiş özeti QR kodu</string>
+    <string name="cd_audit_progress">Teftiş ilerlemesi</string>
     <string name="report_saved_success">Adli teftiş arşivi başarıyla kaydedildi</string>
+    <string name="report_saved_fallback">Sistem dosya seçicisi bulunamadı; arşiv doğrudan kaydedildi: %1$s</string>
     <string name="report_save_failed">Arşiv kaydedilemedi</string>
     <string name="report_privacy_notice">Not: Adli ZIP içindeki sistem günlükleri cihaz seri numarası içerebilir; paylaşmadan önce kontrol edin.</string>
 
@@ -98,8 +109,42 @@
     <string name="about_version">Sürüm %1$s</string>
     <string name="about_description">Fake Hunter, Android multimedya sistemleri (Head Unit), TV kutuları ve mobil cihazlarda sahte donanım modifikasyonlarını (şişirilmiş RAM/SWAP, sahte çekirdek, sahte Android sürümü) ifşa eden açık kaynaklı bir araç setidir.</string>
     <string name="about_privacy_title">Gizlilik ve Güvenlik</string>
-    <string name="about_privacy_desc">• Sıfır internet izni (%100 çevrimdışı)\n• Hiçbir veri toplamaz veya aktarmaz\n• Çökme korumalı savunmacı mimari</string>
+    <string name="about_privacy_desc" formatted="false">• Sıfır internet izni (%100 çevrimdışı)\n• Hiçbir veri toplamaz veya aktarmaz\n• Çökme korumalı savunmacı mimari</string>
     <string name="about_license_text">Açık kaynak yazılım (MIT Lisansı).</string>
     <string name="about_github_url">https://github.com/gokcank/Fake-Hunter</string>
     <string name="btn_close">Kapat</string>
+
+    <!-- Yerelleştirilmiş Bulgu Başlık ve Açıklamaları -->
+    <string name="issue_title_storage_failed">Depolama Doğrulaması Başarısız</string>
+    <string name="issue_desc_storage_failed">%1$s</string>
+    <string name="issue_title_storage_incomplete">Depolama Testi Tamamlanamadı</string>
+    <string name="issue_desc_storage_incomplete">%1$s</string>
+    <string name="issue_title_ram_spoofed">RAM Boyutu Sahte</string>
+    <string name="issue_desc_ram_spoofed">Android toplam %1$s MB RAM bildiriyor ancak çekirdek fiziksel belleği yalnızca %2$s MB.</string>
+    <string name="issue_title_virtual_ram">Sanal RAM / ZRAM Genişletmesi Etkin</string>
+    <string name="issue_desc_virtual_ram" formatted="false">Yüksek sıkıştırılmış ZRAM takas alanı (%1$s MB; %3$s MB fiziksel RAM\'in %%%2$s kadarı) Android 11+ cihazlarda yaygındır. Satıcı iddiasını fiziksel RAM ile karşılaştırın.</string>
+    <string name="issue_title_high_swap">Yüksek Takas Belleği Ayırma</string>
+    <string name="issue_desc_high_swap" formatted="false">Takas belleği (%1$s MB), fiziksel RAM\'in (%3$s MB) %%%2$s kadarıdır. Ucuz teypler yüksek RAM göstermek için takas alanını fiziksel RAM ile birleştirir.</string>
+    <string name="issue_title_disk_swap">Yüksek Disk Tabanlı Takas Alanı</string>
+    <string name="issue_desc_disk_swap" formatted="false">Disk tabanlı takas alanı fiziksel RAM\'in %%%1$s kadarıdır (%2$s MB / %3$s MB).</string>
+    <string name="issue_title_cpu_restricted">İşlemci Frekansları Kısıtlı</string>
+    <string name="issue_desc_cpu_restricted">Sistem güvenlik kısıtlamaları çekirdek frekanslarının okunmasını engelledi; bildirilen %1$s çekirdek saat hızıyla doğrulanamadı.</string>
+    <string name="issue_title_fake_cores">Sahte İşlemci Çekirdeği Tespit Edildi</string>
+    <string name="issue_desc_fake_cores">Sistem %1$s çekirdek bildiriyor ancak yalnızca %2$s çekirdek aktif çalışma frekansı üretiyor.</string>
+    <string name="issue_title_storage_spoofed">Depolama Boyutu Sahte</string>
+    <string name="issue_desc_storage_spoofed">/data bölümü %1$s MB bildiriyor ancak dahili fiziksel bellek yongaları yalnızca %2$s MB kapasiteye sahip.</string>
+    <string name="issue_title_ac8227l">AC8227L Yonga Seti İmzası</string>
+    <string name="issue_desc_ac8227l_fake">AutoChips/MediaTek AC8227L (32-bit 4 çekirdekli Cortex-A7) yongası, bildirilen özelliklerle (çekirdek, RAM veya Android sürümü) çelişiyor.</string>
+    <string name="issue_desc_ac8227l_info">Eski nesil 4 çekirdekli AutoChips/MediaTek AC8227L platformu saptandı. Satıcının 8 çekirdek veya Android 11+ vaat etmediğini doğrulayın.</string>
+    <string name="issue_title_allwinner_t3">Allwinner T3 / sun8i Yonga İmzası</string>
+    <string name="issue_desc_allwinner_t3_fake">Allwinner sun8i/T3 (32-bit 4 çekirdekli Cortex-A7) yongası, bildirilen özelliklerle (çekirdek, RAM veya Android sürümü) çelişiyor.</string>
+    <string name="issue_desc_allwinner_t3_info">Eski nesil 4 çekirdekli Allwinner sun8i/T3 platformu saptandı. Satıcının 8 çekirdek veya Android 11+ vaat etmediğini doğrulayın.</string>
+    <string name="issue_title_mt6580">MT6580 Eski Yonga İmzası</string>
+    <string name="issue_desc_mt6580_fake">MediaTek MT6580 (2015 32-bit 4 çekirdekli işlemci) bildirilen özelliklerle (çekirdek, RAM veya Android sürümü) çelişiyor.</string>
+    <string name="issue_desc_mt6580_info">Eski nesil 4 çekirdekli MediaTek MT6580 platformu saptandı. Güncel 8 çekirdekli donanım olarak satılmadığından emin olun.</string>
+    <string name="issue_title_rockchip">Rockchip Giriş Seviyesi Yonga İmzası</string>
+    <string name="issue_desc_rockchip_fake">Giriş seviyesi 4 çekirdekli Rockchip RK3128/RK3228/RK3229 yongası bildirilen özelliklerle çelişiyor.</string>
+    <string name="issue_desc_rockchip_info">Giriş seviyesi 4 çekirdekli Rockchip platformu saptandı; sıklıkla şişirilmiş özelliklerle yeniden satılır.</string>
+    <string name="issue_title_android_spoofed">Android Sürümü Sahte</string>
+    <string name="issue_desc_android_spoofed">Bildirilen Android %1$s sürümü, gerçek çekirdek API seviyesi %2$s (Android %3$s) ile çelişiyor.</string>
 </resources>

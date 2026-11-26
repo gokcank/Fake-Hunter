@@ -1,22 +1,27 @@
 package com.gokcank.fakehunter
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -25,14 +30,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gokcank.fakehunter.core.detector.AuditCoordinator
 import com.gokcank.fakehunter.core.detector.HardwareDetector
 import com.gokcank.fakehunter.core.export.EvidenceCollector
-import com.gokcank.fakehunter.core.model.AuditOptions
 import com.gokcank.fakehunter.core.model.AuditReport
+import com.gokcank.fakehunter.core.model.IssueFormatter
 import com.gokcank.fakehunter.core.model.IssueSeverity
 import com.gokcank.fakehunter.core.model.Verdict
 import com.gokcank.fakehunter.core.qr.QrHelper
@@ -47,91 +58,97 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val darkBarColor = android.graphics.Color.parseColor("#121418")
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(darkBarColor),
+            navigationBarStyle = SystemBarStyle.dark(darkBarColor)
+        )
         super.onCreate(savedInstanceState)
+
+        AuditCoordinator.ensureInitialAudit(
+            this,
+            SettingsManager.getAuditOptions(this)
+        )
 
         setContent {
             ModernAppTheme {
-                var report by remember { mutableStateOf<AuditReport?>(null) }
-                var isInspecting by remember { mutableStateOf(false) }
-                var progressPercent by remember { mutableStateOf(0) }
-                var progressText by remember { mutableStateOf("") }
-                var currentPhase by remember { mutableStateOf(HardwareDetector.Phase.SYSTEM) }
+                var coordState by remember { mutableStateOf(AuditCoordinator.state) }
                 var showAboutDialog by remember { mutableStateOf(false) }
                 var showSettingsDialog by remember { mutableStateOf(false) }
                 var showQrDialog by remember { mutableStateOf(false) }
 
-                fun runInspection(options: AuditOptions = SettingsManager.getAuditOptions(this@MainActivity)) {
-                    if (isInspecting) return
-                    isInspecting = true
-                    progressPercent = 0
-                    Thread {
-                        val result = HardwareDetector.performAudit(this@MainActivity, options) { phase, pct, detail ->
-                            runOnUiThread {
-                                currentPhase = phase
-                                progressPercent = pct
-                                progressText = phaseLabel(phase, detail)
-                            }
+                DisposableEffect(Unit) {
+                    val listener = object : AuditCoordinator.Listener {
+                        override fun onStateChanged(state: AuditCoordinator.State) {
+                            coordState = state
                         }
-                        runOnUiThread {
-                            report = result
-                            isInspecting = false
-                        }
-                    }.start()
+                    }
+                    AuditCoordinator.registerListener(listener)
+                    onDispose {
+                        AuditCoordinator.unregisterListener(listener)
+                    }
                 }
 
-                // Storage Access Framework launcher for saving evidence ZIP
                 val saveLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.CreateDocument("application/zip")
                 ) { uri ->
-                    val targetReport = report
-                    if (uri != null && targetReport != null) {
-                        Thread {
-                            val success = try {
-                                contentResolver.openOutputStream(uri)?.use { os ->
-                                    EvidenceCollector.exportEvidenceZip(targetReport, os)
-                                } ?: false
-                            } catch (e: Exception) {
-                                false
+                    if (uri != null) {
+                        AuditCoordinator.exportZipToSafUri(this@MainActivity, uri) { success ->
+                            val msg = if (success) {
+                                getString(R.string.report_saved_success)
+                            } else {
+                                getString(R.string.report_save_failed)
                             }
-                            if (!success) {
-                                EvidenceCollector.deletePartialSafDocument(this@MainActivity, uri)
-                            }
-                            runOnUiThread {
-                                val msg = if (success) {
-                                    getString(R.string.report_saved_success)
-                                } else {
-                                    getString(R.string.report_save_failed)
-                                }
-                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                            }
-                        }.start()
+                            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
 
                 fun triggerSaveZip() {
-                    val current = report ?: return
+                    val current = coordState.report ?: return
+                    if (coordState.isExportingZip) return
                     Toast.makeText(this@MainActivity, getString(R.string.report_privacy_notice), Toast.LENGTH_LONG).show()
                     val fileName = EvidenceCollector.generateZipFileName(current)
-                    saveLauncher.launch(fileName)
+                    try {
+                        saveLauncher.launch(fileName)
+                    } catch (_: ActivityNotFoundException) {
+                        // Fallback for stripped head units without DocumentsUI
+                        AuditCoordinator.exportZipFallback(this@MainActivity) { savedFile ->
+                            val msg = if (savedFile != null) {
+                                getString(R.string.report_saved_fallback, savedFile.absolutePath)
+                            } else {
+                                getString(R.string.report_save_failed)
+                            }
+                            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
 
                 fun copyReport() {
-                    val current = report ?: return
+                    val current = coordState.report ?: return
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     val clip = ClipData.newPlainText("FakeHunter Report", current.toFormattedPlainText())
                     clipboard.setPrimaryClip(clip)
                     Toast.makeText(this@MainActivity, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
                 }
 
-                LaunchedEffect(Unit) { runInspection() }
+                val progressText = phaseLabel(coordState.phase, coordState.progressDetail)
 
                 ModernDashboard(
-                    report = report,
-                    isInspecting = isInspecting,
-                    progressPercent = progressPercent,
+                    report = coordState.report,
+                    isInspecting = coordState.isInspecting,
+                    isExportingZip = coordState.isExportingZip,
+                    progressPercent = coordState.progressPercent,
                     progressText = progressText,
-                    onInspect = { runInspection() },
-                    onRootInspect = { runInspection(SettingsManager.getAuditOptions(this@MainActivity).copy(requestRoot = true)) },
+                    onInspect = {
+                        AuditCoordinator.startFullAudit(
+                            this@MainActivity,
+                            SettingsManager.getAuditOptions(this@MainActivity)
+                        )
+                    },
+                    onRootInspect = {
+                        AuditCoordinator.startRootOnlyAudit(this@MainActivity)
+                    },
                     onSaveZip = { triggerSaveZip() },
                     onOpenQr = { showQrDialog = true },
                     onOpenSettings = { showSettingsDialog = true },
@@ -154,8 +171,11 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (showQrDialog && report != null) {
-                    QrSummaryDialog(report = report!!, onDismiss = { showQrDialog = false })
+                if (showQrDialog && coordState.report != null) {
+                    QrSummaryDialog(
+                        report = coordState.report!!,
+                        onDismiss = { showQrDialog = false }
+                    )
                 }
             }
         }
@@ -190,6 +210,7 @@ fun ModernAppTheme(content: @Composable () -> Unit) {
 fun ModernDashboard(
     report: AuditReport?,
     isInspecting: Boolean,
+    isExportingZip: Boolean,
     progressPercent: Int,
     progressText: String,
     onInspect: () -> Unit,
@@ -200,12 +221,17 @@ fun ModernDashboard(
     onOpenAbout: () -> Unit,
     onCopy: () -> Unit
 ) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isWideScreen = configuration.screenWidthDp >= 600
     val scrollState = rememberScrollState()
+    val progressDesc = stringResource(R.string.cd_audit_progress)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF121418))
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(16.dp)
             .verticalScroll(scrollState)
     ) {
@@ -225,7 +251,7 @@ fun ModernDashboard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Row 1: Main actions
+            // Row 1: Main actions (equal 1:1:1 weights matching Classic)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -233,7 +259,7 @@ fun ModernDashboard(
             ) {
                 Button(
                     onClick = onInspect,
-                    enabled = !isInspecting,
+                    enabled = !isInspecting && !isExportingZip,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
                 ) {
@@ -241,31 +267,36 @@ fun ModernDashboard(
                         text = if (isInspecting) "..." else stringResource(R.string.btn_reinspect),
                         color = Color.Black,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
+                        fontSize = 12.sp
                     )
                 }
 
                 Button(
                     onClick = onSaveZip,
-                    enabled = report != null && !isInspecting,
-                    modifier = Modifier.weight(1.2f),
+                    enabled = report != null && !isInspecting && !isExportingZip,
+                    modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D333D))
                 ) {
-                    Text(text = stringResource(R.string.btn_save_report), color = Color(0xFF00E5FF), fontSize = 13.sp)
+                    Text(
+                        text = if (isExportingZip) stringResource(R.string.btn_saving_report) else stringResource(R.string.btn_save_report),
+                        color = Color(0xFF00E5FF),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 OutlinedButton(
                     onClick = onOpenQr,
                     enabled = report != null && !isInspecting,
-                    modifier = Modifier.weight(0.9f)
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text(text = stringResource(R.string.btn_qr_code), color = Color.White, fontSize = 13.sp)
+                    Text(text = stringResource(R.string.btn_qr_code), color = Color.White, fontSize = 12.sp)
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Row 2: Secondary actions
+            // Row 2: Secondary actions (equal 1:1:1 weights)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -295,8 +326,8 @@ fun ModernDashboard(
             }
         }
 
-        // Live progress of the audit chain
-        if (isInspecting) {
+        // Live progress of the audit chain or ZIP export
+        if (isInspecting || isExportingZip) {
             Spacer(modifier = Modifier.height(16.dp))
             Card(
                 modifier = Modifier
@@ -306,13 +337,27 @@ fun ModernDashboard(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(progressText, color = Color(0xFF00E5FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    val label = if (isExportingZip) stringResource(R.string.btn_saving_report) else progressText
+                    Text(label, color = Color(0xFF00E5FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { progressPercent / 100f },
-                        modifier = Modifier.fillMaxWidth().height(6.dp),
-                        color = Color(0xFF00E5FF)
-                    )
+                    if (isExportingZip) {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .semantics { contentDescription = progressDesc },
+                            color = Color(0xFF00E5FF)
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            progress = { progressPercent / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .semantics { contentDescription = progressDesc },
+                            color = Color(0xFF00E5FF)
+                        )
+                    }
                 }
             }
         }
@@ -354,7 +399,7 @@ fun ModernDashboard(
                     color = verdictBgColor
                 )
                 Text(
-                    text = "Issues: ${report.issues.size}",
+                    text = stringResource(R.string.issues_count_label, report.issues.size),
                     color = Color.White,
                     fontSize = 14.sp
                 )
@@ -363,27 +408,19 @@ fun ModernDashboard(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Grid Row 1: System Identity & Memory
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            MetricCard(
-                title = stringResource(R.string.header_system),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Model: ${report.system.model} (${report.system.manufacturer})", color = Color.White, fontSize = 13.sp)
-                Text("Board: ${report.system.board}", color = Color(0xFF90A4AE), fontSize = 12.sp)
-                Text("Platform: ${report.system.platform}", color = Color(0xFF90A4AE), fontSize = 12.sp)
-                Text("Android: ${report.system.reportedRelease} (API ${report.system.actualSdkLevel})", color = Color.White, fontSize = 13.sp)
+        val systemCard: @Composable (Modifier) -> Unit = { mod ->
+            MetricCard(title = stringResource(R.string.header_system), modifier = mod) {
+                Text(stringResource(R.string.metric_model, report.system.model, report.system.manufacturer), color = Color.White, fontSize = 13.sp)
+                Text(stringResource(R.string.metric_board, report.system.board), color = Color(0xFF90A4AE), fontSize = 12.sp)
+                Text(stringResource(R.string.metric_platform, report.system.platform), color = Color(0xFF90A4AE), fontSize = 12.sp)
+                Text(stringResource(R.string.metric_android, report.system.reportedRelease, report.system.actualSdkLevel), color = Color.White, fontSize = 13.sp)
             }
+        }
 
-            MetricCard(
-                title = stringResource(R.string.header_memory),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Physical RAM: ${report.ram.physicalGbFormatted}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text("Swap / ZRAM: ${report.ram.swapGbFormatted}", color = Color(0xFF90A4AE), fontSize = 12.sp)
+        val memoryCard: @Composable (Modifier) -> Unit = { mod ->
+            MetricCard(title = stringResource(R.string.header_memory), modifier = mod) {
+                Text(stringResource(R.string.metric_ram_physical, report.ram.physicalGbFormatted), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.metric_ram_swap, report.ram.swapGbFormatted), color = Color(0xFF90A4AE), fontSize = 12.sp)
                 when {
                     report.ram.isRamSpoofed ->
                         Text(stringResource(R.string.warn_ram_spoofed), color = Color(0xFFFF1744), fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -397,18 +434,13 @@ fun ModernDashboard(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Grid Row 2: CPU Cores & Storage
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            MetricCard(
-                title = stringResource(R.string.header_cpu),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Reported: ${report.cpu.reportedCores} | Active: ${report.cpu.activeCores}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        val cpuCard: @Composable (Modifier) -> Unit = { mod ->
+            MetricCard(title = stringResource(R.string.header_cpu), modifier = mod) {
+                Text(stringResource(R.string.metric_cores, report.cpu.reportedCores, report.cpu.activeCores), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                val maxMhz = report.cpu.coreDetails.maxOfOrNull { maxOf(it.maxFreqMhz, it.currentFreqMhz) } ?: 0L
+                if (maxMhz > 0L) {
+                    Text(stringResource(R.string.metric_cpu_max_freq, maxMhz), color = Color(0xFF90A4AE), fontSize = 12.sp)
+                }
                 when {
                     !report.cpu.frequenciesReadable ->
                         Text(stringResource(R.string.cpu_freq_unreadable), color = Color(0xFFFFD600), fontSize = 12.sp)
@@ -421,18 +453,19 @@ fun ModernDashboard(
                     Text(stringResource(R.string.cpu_wake_done), color = Color(0xFF90A4AE), fontSize = 11.sp)
                 }
             }
+        }
 
-            MetricCard(
-                title = stringResource(R.string.header_storage),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Total /data: ${report.storage.totalDataGbFormatted}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text("Free Space: ${report.storage.freeDataGbFormatted}", color = Color(0xFF90A4AE), fontSize = 12.sp)
+        val storageCard: @Composable (Modifier) -> Unit = { mod ->
+            MetricCard(title = stringResource(R.string.header_storage), modifier = mod) {
+                Text(stringResource(R.string.metric_storage_total, report.storage.totalDataGbFormatted), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.metric_storage_free, report.storage.freeDataGbFormatted), color = Color(0xFF90A4AE), fontSize = 12.sp)
                 if (report.storage.flashChips.isNotEmpty()) {
                     Text(
                         stringResource(R.string.metric_flash_physical, report.storage.physicalFlashGbFormatted),
                         color = Color(0xFF00E5FF), fontSize = 12.sp
                     )
+                    val chipSummary = report.storage.flashChips.joinToString(", ") { "${it.name}: ${it.sizeGbFormatted}" }
+                    Text(stringResource(R.string.metric_chip_detail, chipSummary), color = Color(0xFF90A4AE), fontSize = 11.sp)
                 } else {
                     Text(stringResource(R.string.metric_flash_unreadable), color = Color(0xFF90A4AE), fontSize = 12.sp)
                 }
@@ -445,24 +478,15 @@ fun ModernDashboard(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Grid Row 3: Root Security & Storage Verification Test
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            MetricCard(
-                title = stringResource(R.string.header_root),
-                modifier = Modifier.weight(1f)
-            ) {
+        val rootCard: @Composable (Modifier) -> Unit = { mod ->
+            MetricCard(title = stringResource(R.string.header_root), modifier = mod) {
                 val (rootColor, rootText) = when {
                     report.root.isRootGranted -> Pair(Color(0xFF00E676), stringResource(R.string.root_status_granted))
                     report.root.isRootBinaryFound -> Pair(Color(0xFFFFD600), stringResource(R.string.root_status_binary_only))
                     else -> Pair(Color(0xFF90A4AE), stringResource(R.string.root_status_none))
                 }
                 Text(rootText, color = rootColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text("SELinux: ${report.root.selinuxMode}", color = Color(0xFF90A4AE), fontSize = 12.sp)
+                Text(stringResource(R.string.metric_selinux, report.root.selinuxMode), color = Color(0xFF90A4AE), fontSize = 12.sp)
                 if (report.root.rawPartitions.isNotEmpty()) {
                     Text(stringResource(R.string.root_partitions, report.root.rawPartitions.size), color = Color(0xFF00E5FF), fontSize = 12.sp)
                 }
@@ -473,20 +497,19 @@ fun ModernDashboard(
                     Spacer(modifier = Modifier.height(6.dp))
                     Button(
                         onClick = onRootInspect,
-                        enabled = !isInspecting,
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        enabled = !isInspecting && !isExportingZip,
+                        modifier = Modifier.height(34.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D333D))
                     ) {
-                        Text(stringResource(R.string.btn_deep_root_audit), fontSize = 11.sp, color = Color.White)
+                        Text(stringResource(R.string.btn_deep_root_audit), fontSize = 11.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
                     }
                 }
             }
+        }
 
-            MetricCard(
-                title = stringResource(R.string.header_storage_test),
-                modifier = Modifier.weight(1f)
-            ) {
+        val storageTestCard: @Composable (Modifier) -> Unit = { mod ->
+            MetricCard(title = stringResource(R.string.header_storage_test), modifier = mod) {
                 Text(stringResource(R.string.storage_test_desc), color = Color(0xFF90A4AE), fontSize = 11.sp)
                 Spacer(modifier = Modifier.height(6.dp))
                 val test = report.storageTest
@@ -512,10 +535,36 @@ fun ModernDashboard(
             }
         }
 
-        // Findings Section (if any)
+        if (isWideScreen) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                systemCard(Modifier.weight(1f))
+                memoryCard(Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                cpuCard(Modifier.weight(1f))
+                storageCard(Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                rootCard(Modifier.weight(1f))
+                storageTestCard(Modifier.weight(1f))
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                systemCard(Modifier.fillMaxWidth())
+                memoryCard(Modifier.fillMaxWidth())
+                cpuCard(Modifier.fillMaxWidth())
+                storageCard(Modifier.fillMaxWidth())
+                rootCard(Modifier.fillMaxWidth())
+                storageTestCard(Modifier.fillMaxWidth())
+            }
+        }
+
+        // Findings Section (only when issues exist)
         if (report.issues.isNotEmpty()) {
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Findings / Bulgular:", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.findings_header), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
             report.issues.forEach { issue ->
                 val issueColor = when (issue.severity) {
@@ -526,13 +575,23 @@ fun ModernDashboard(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 4.dp)
+                        .border(1.dp, Color(0xFF2D333D), RoundedCornerShape(8.dp)),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1C2026)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text(text = issue.title, color = issueColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(text = issue.description, color = Color(0xFFCFD8DC), fontSize = 12.sp)
+                        Text(
+                            text = IssueFormatter.resolveTitle(context, issue),
+                            color = issueColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = IssueFormatter.resolveDescription(context, issue),
+                            color = Color(0xFFCFD8DC),
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }
@@ -565,44 +624,64 @@ fun SettingsDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Language
-                Text(text = stringResource(R.string.settings_language), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = selectedLang == SettingsManager.LANG_SYSTEM,
-                        onClick = { selectedLang = SettingsManager.LANG_SYSTEM },
-                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00E5FF))
-                    )
-                    Text(stringResource(R.string.settings_lang_system), color = Color.White, fontSize = 13.sp)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = selectedLang == SettingsManager.LANG_TR,
-                        onClick = { selectedLang = SettingsManager.LANG_TR },
-                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00E5FF))
-                    )
-                    Text(stringResource(R.string.settings_lang_tr), color = Color.White, fontSize = 13.sp)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = selectedLang == SettingsManager.LANG_EN,
-                        onClick = { selectedLang = SettingsManager.LANG_EN },
-                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00E5FF))
-                    )
-                    Text(stringResource(R.string.settings_lang_en), color = Color.White, fontSize = 13.sp)
+                Text(
+                    text = stringResource(R.string.settings_language),
+                    color = Color(0xFF00E5FF),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+
+                val langOptions = listOf(
+                    SettingsManager.LANG_SYSTEM to stringResource(R.string.settings_lang_system),
+                    SettingsManager.LANG_TR to stringResource(R.string.settings_lang_tr),
+                    SettingsManager.LANG_EN to stringResource(R.string.settings_lang_en)
+                )
+                langOptions.forEach { (code, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = selectedLang == code,
+                                role = Role.RadioButton,
+                                onClick = { selectedLang = code }
+                            )
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedLang == code,
+                            onClick = null,
+                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF00E5FF))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(label, color = Color.White, fontSize = 13.sp)
+                    }
                 }
 
                 HorizontalDivider(color = Color(0xFF2D333D))
 
-                // Auto Root
-                Text(text = stringResource(R.string.settings_auto_root), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text(text = stringResource(R.string.settings_auto_root_desc), color = Color(0xFF90A4AE), fontSize = 11.sp)
+                Text(
+                    text = stringResource(R.string.settings_auto_root),
+                    color = Color(0xFF00E5FF),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = stringResource(R.string.settings_auto_root_desc),
+                    color = Color(0xFF90A4AE),
+                    fontSize = 11.sp
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { autoRoot = !autoRoot },
+                        .toggleable(
+                            value = autoRoot,
+                            role = Role.Switch,
+                            onValueChange = { autoRoot = it }
+                        )
+                        .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -614,7 +693,7 @@ fun SettingsDialog(
                     )
                     Switch(
                         checked = autoRoot,
-                        onCheckedChange = { autoRoot = it },
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color(0xFF121418),
                             checkedTrackColor = Color(0xFF00E5FF),
@@ -628,9 +707,17 @@ fun SettingsDialog(
 
                 HorizontalDivider(color = Color(0xFF2D333D))
 
-                // Storage Test Size
-                Text(text = stringResource(R.string.settings_storage_test), color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text(text = stringResource(R.string.settings_storage_test_desc), color = Color(0xFF90A4AE), fontSize = 11.sp)
+                Text(
+                    text = stringResource(R.string.settings_storage_test),
+                    color = Color(0xFF00E5FF),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = stringResource(R.string.settings_storage_test_desc),
+                    color = Color(0xFF90A4AE),
+                    fontSize = 11.sp
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(100, 250, 500).forEach { size ->
                         FilterChip(
@@ -640,6 +727,11 @@ fun SettingsDialog(
                         )
                     }
                 }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.btn_cancel), color = Color(0xFF90A4AE), fontWeight = FontWeight.SemiBold)
             }
         },
         confirmButton = {
@@ -657,7 +749,7 @@ fun SettingsDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
             ) {
-                Text(stringResource(R.string.btn_close), color = Color.Black, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.btn_save), color = Color.Black, fontWeight = FontWeight.Bold)
             }
         },
         containerColor = Color(0xFF1C2026),
@@ -670,8 +762,32 @@ fun QrSummaryDialog(
     report: AuditReport,
     onDismiss: () -> Unit
 ) {
-    val qrText = remember(report) { QrHelper.generateAuditSummary(report) }
-    val qrBitmap = remember(qrText) { QrHelper.generateQrBitmap(qrText, 512) }
+    val configuration = LocalConfiguration.current
+    val qrBoxDp = minOf(230f, (configuration.screenHeightDp * 0.48f).coerceAtLeast(150f)).dp
+    var qrBitmap by remember(report) { mutableStateOf<Bitmap?>(null) }
+    var isGenerating by remember(report) { mutableStateOf(true) }
+
+    DisposableEffect(report) {
+        isGenerating = true
+        var cancelled = false
+        val mainHandler = Handler(Looper.getMainLooper())
+        Thread({
+            val summary = QrHelper.generateAuditSummary(report)
+            val bmp = QrHelper.generateQrBitmap(summary, 512)
+            mainHandler.post {
+                if (!cancelled) {
+                    qrBitmap = bmp
+                    isGenerating = false
+                }
+            }
+        }, "FakeHunter-QrGen").apply {
+            isDaemon = true
+            start()
+        }
+        onDispose {
+            cancelled = true
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -685,7 +801,9 @@ fun QrSummaryDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -694,17 +812,32 @@ fun QrSummaryDialog(
                     color = Color(0xFF90A4AE),
                     fontSize = 12.sp
                 )
-                if (qrBitmap != null) {
-                    Image(
-                        bitmap = qrBitmap.asImageBitmap(),
-                        contentDescription = "QR Code",
-                        modifier = Modifier
-                            .size(260.dp)
-                            .background(Color.White, RoundedCornerShape(8.dp))
-                            .padding(8.dp)
-                    )
-                } else {
-                    Text("Error generating QR", color = Color(0xFFFF1744))
+                when {
+                    isGenerating -> {
+                        Text(
+                            text = stringResource(R.string.qr_generating),
+                            color = Color(0xFF00E5FF),
+                            fontSize = 13.sp
+                        )
+                    }
+                    qrBitmap != null -> {
+                        Image(
+                            bitmap = qrBitmap!!.asImageBitmap(),
+                            contentDescription = stringResource(R.string.cd_qr_code),
+                            modifier = Modifier
+                                .size(qrBoxDp)
+                                .background(Color.White, RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        )
+                    }
+                    else -> {
+                        Text(
+                            text = stringResource(R.string.qr_error_failed),
+                            color = Color(0xFFFF1744),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         },
@@ -734,7 +867,17 @@ fun AboutDialog(onDismiss: () -> Unit) {
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.about_subtitle),
+                    color = Color(0xFF90A4AE),
+                    fontSize = 12.sp
+                )
                 Text(
                     text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
                     color = Color(0xFF00E5FF),

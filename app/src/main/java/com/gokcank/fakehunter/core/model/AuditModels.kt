@@ -12,10 +12,33 @@ enum class IssueSeverity {
     FAKE
 }
 
+enum class IssueCode {
+    STORAGE_VERIFICATION_FAILED,
+    STORAGE_TEST_INCOMPLETE,
+    RAM_SIZE_SPOOFED,
+    VIRTUAL_RAM_ACTIVE,
+    HIGH_SWAP_ALLOCATION,
+    ELEVATED_DISK_SWAP,
+    CPU_FREQ_RESTRICTED,
+    FAKE_CPU_CORES,
+    STORAGE_SIZE_SPOOFED,
+    CHIPSET_AC8227L_FAKE,
+    CHIPSET_AC8227L_INFO,
+    CHIPSET_ALLWINNER_T3_FAKE,
+    CHIPSET_ALLWINNER_T3_INFO,
+    CHIPSET_MT6580_FAKE,
+    CHIPSET_MT6580_INFO,
+    CHIPSET_ROCKCHIP_FAKE,
+    CHIPSET_ROCKCHIP_INFO,
+    ANDROID_VERSION_SPOOFED
+}
+
 data class AuditIssue(
     val severity: IssueSeverity,
     val title: String,
-    val description: String
+    val description: String,
+    val code: IssueCode? = null,
+    val formatArgs: List<String> = emptyList()
 )
 
 /** Options for a full audit run. Every test runs by default. */

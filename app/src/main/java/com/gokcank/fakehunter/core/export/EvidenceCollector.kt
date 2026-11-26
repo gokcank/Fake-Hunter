@@ -117,6 +117,27 @@ object EvidenceCollector {
     }
 
     /**
+     * Fallback exporter for stripped-down head units / TV boxes that lack Android's
+     * system file picker (DocumentsUI / ACTION_CREATE_DOCUMENT).
+     */
+    fun exportFallbackToAppDir(context: Context, report: AuditReport): File? {
+        return safeRun("ExportFallbackZip", null) {
+            val baseDir = context.getExternalFilesDir(null)?.takeIf { it.exists() || it.mkdirs() }
+                ?: context.filesDir.apply { if (!exists()) mkdirs() }
+            val outFile = File(baseDir, generateZipFileName(report))
+            val ok = outFile.outputStream().use { os ->
+                exportEvidenceZip(report, os)
+            }
+            if (ok && outFile.exists() && outFile.length() > 0L) {
+                outFile
+            } else {
+                safeRun("DeleteFailedFallback", false) { outFile.delete() }
+                null
+            }
+        }
+    }
+
+    /**
      * Deletes an incomplete / 0-byte SAF document if ZIP export fails so corrupt remnants
      * are not left behind in the user's storage.
      */

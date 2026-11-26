@@ -68,7 +68,9 @@ object HardwareDetector {
                     AuditIssue(
                         severity = IssueSeverity.FAKE,
                         title = "Storage Verification Failed",
-                        description = storageTest.message
+                        description = storageTest.message,
+                        code = IssueCode.STORAGE_VERIFICATION_FAILED,
+                        formatArgs = listOf(storageTest.message)
                     )
                 )
             } else if (storageTest.hasError) {
@@ -76,7 +78,9 @@ object HardwareDetector {
                     AuditIssue(
                         severity = IssueSeverity.WARNING,
                         title = "Storage Test Could Not Complete",
-                        description = storageTest.message
+                        description = storageTest.message,
+                        code = IssueCode.STORAGE_TEST_INCOMPLETE,
+                        formatArgs = listOf(storageTest.message)
                     )
                 )
             }
@@ -85,11 +89,7 @@ object HardwareDetector {
         evaluateKnownFraudSignatures(systemInfo, ramInfo, cpuInfo, issues)
         evaluateAndroidVersionSpoofing(systemInfo, issues)
 
-        val verdict = when {
-            issues.any { it.severity == IssueSeverity.FAKE } -> Verdict.FAKE_DETECTED
-            issues.any { it.severity == IssueSeverity.WARNING } -> Verdict.SUSPICIOUS
-            else -> Verdict.VERIFIED
-        }
+        val verdict = computeVerdict(issues)
 
         onProgress(Phase.DONE, 100, "")
         return AuditReport(
@@ -102,6 +102,41 @@ object HardwareDetector {
             verdict = verdict,
             issues = issues
         )
+    }
+
+    /**
+     * Re-runs ONLY root elevation and root-assisted raw flash sizing while preserving
+     * already collected system, RAM, CPU, and storage write-verification results.
+     */
+    fun refreshRootAndFlashOnly(
+        baseline: AuditReport,
+        onProgress: (phase: Phase, percent: Int, detail: String) -> Unit = { _, _, _ -> }
+    ): AuditReport {
+        val issues = baseline.issues
+            .filterNot { it.code == IssueCode.STORAGE_SIZE_SPOOFED }
+            .toMutableList()
+
+        onProgress(Phase.ROOT, 30, "")
+        val rootInfo = RootHelper.inspectRoot(requestRootElevation = true)
+
+        onProgress(Phase.FLASH, 75, "")
+        val storageInfo = detectStorageInfo(issues, useRoot = rootInfo.isRootGranted)
+
+        val verdict = computeVerdict(issues)
+        onProgress(Phase.DONE, 100, "")
+
+        return baseline.copy(
+            storage = storageInfo,
+            root = rootInfo,
+            verdict = verdict,
+            issues = issues
+        )
+    }
+
+    private fun computeVerdict(issues: List<AuditIssue>): Verdict = when {
+        issues.any { it.severity == IssueSeverity.FAKE } -> Verdict.FAKE_DETECTED
+        issues.any { it.severity == IssueSeverity.WARNING } -> Verdict.SUSPICIOUS
+        else -> Verdict.VERIFIED
     }
 
     private fun detectSystemInfo(): SystemInfo {
@@ -188,7 +223,9 @@ object HardwareDetector {
                 AuditIssue(
                     severity = IssueSeverity.FAKE,
                     title = "RAM Size Spoofed",
-                    description = "Android reports ${reportedTotalMb}MB total RAM, but Linux kernel physical RAM is only ${physicalMb}MB."
+                    description = "Android reports ${reportedTotalMb}MB total RAM, but Linux kernel physical RAM is only ${physicalMb}MB.",
+                    code = IssueCode.RAM_SIZE_SPOOFED,
+                    formatArgs = listOf(reportedTotalMb.toString(), physicalMb.toString())
                 )
             )
         }
@@ -206,7 +243,9 @@ object HardwareDetector {
                         AuditIssue(
                             severity = IssueSeverity.INFO,
                             title = "Virtual RAM / ZRAM Expansion Active",
-                            description = "Large compressed ZRAM swap (${swapMb}MB, ${ratio}% of ${physicalMb}MB physical RAM) is common on Android 11+ devices. Verify seller claims against the physical RAM figure."
+                            description = "Large compressed ZRAM swap (${swapMb}MB, ${ratio}% of ${physicalMb}MB physical RAM) is common on Android 11+ devices. Verify seller claims against the physical RAM figure.",
+                            code = IssueCode.VIRTUAL_RAM_ACTIVE,
+                            formatArgs = listOf(swapMb.toString(), ratio.toString(), physicalMb.toString())
                         )
                     )
                 } else {
@@ -216,7 +255,9 @@ object HardwareDetector {
                         AuditIssue(
                             severity = IssueSeverity.WARNING,
                             title = "High Swap Allocation",
-                            description = "Swap memory (${swapMb}MB) is ${ratio}% of physical RAM (${physicalMb}MB). Budget head units often combine swap with physical RAM to advertise inflated RAM."
+                            description = "Swap memory (${swapMb}MB) is ${ratio}% of physical RAM (${physicalMb}MB). Budget head units often combine swap with physical RAM to advertise inflated RAM.",
+                            code = IssueCode.HIGH_SWAP_ALLOCATION,
+                            formatArgs = listOf(swapMb.toString(), ratio.toString(), physicalMb.toString())
                         )
                     )
                 }
@@ -226,7 +267,9 @@ object HardwareDetector {
                     AuditIssue(
                         severity = IssueSeverity.WARNING,
                         title = "Elevated Disk Swap Allocation",
-                        description = "Disk-backed swap space is ${ratio}% of physical RAM (${swapMb}MB vs ${physicalMb}MB)."
+                        description = "Disk-backed swap space is ${ratio}% of physical RAM (${swapMb}MB vs ${physicalMb}MB).",
+                        code = IssueCode.ELEVATED_DISK_SWAP,
+                        formatArgs = listOf(ratio.toString(), swapMb.toString(), physicalMb.toString())
                     )
                 )
             }
@@ -352,7 +395,9 @@ object HardwareDetector {
                 AuditIssue(
                     severity = IssueSeverity.INFO,
                     title = "CPU Frequencies Restricted",
-                    description = "System security restrictions prevented reading core clock frequencies; reported $reportedCores cores could not be verified by active frequency."
+                    description = "System security restrictions prevented reading core clock frequencies; reported $reportedCores cores could not be verified by active frequency.",
+                    code = IssueCode.CPU_FREQ_RESTRICTED,
+                    formatArgs = listOf(reportedCores.toString())
                 )
             )
             false
@@ -361,7 +406,9 @@ object HardwareDetector {
                 AuditIssue(
                     severity = IssueSeverity.FAKE,
                     title = "Fake CPU Cores Detected",
-                    description = "System reports $reportedCores CPU cores, but only $activeCores generate active clock frequency."
+                    description = "System reports $reportedCores CPU cores, but only $activeCores generate active clock frequency.",
+                    code = IssueCode.FAKE_CPU_CORES,
+                    formatArgs = listOf(reportedCores.toString(), activeCores.toString())
                 )
             )
             true
@@ -403,7 +450,9 @@ object HardwareDetector {
                 AuditIssue(
                     severity = IssueSeverity.FAKE,
                     title = "Storage Size Spoofed",
-                    description = "The /data partition reports ${totalMb}MB, but the internal physical flash chip(s) only hold ${physicalMb}MB."
+                    description = "The /data partition reports ${totalMb}MB, but the internal physical flash chip(s) only hold ${physicalMb}MB.",
+                    code = IssueCode.STORAGE_SIZE_SPOOFED,
+                    formatArgs = listOf(totalMb.toString(), physicalMb.toString())
                 )
             )
         }
@@ -567,39 +616,43 @@ object HardwareDetector {
         when {
             REGEX_AC8227.containsMatchIn(hwStr) || REGEX_AC8227_MODEL.containsMatchIn(modelStr) -> {
                 val severity = if (contradictsQuadCoreLegacy) IssueSeverity.FAKE else IssueSeverity.INFO
+                val code = if (contradictsQuadCoreLegacy) IssueCode.CHIPSET_AC8227L_FAKE else IssueCode.CHIPSET_AC8227L_INFO
                 val desc = if (contradictsQuadCoreLegacy) {
                     "AutoChips/MediaTek AC8227L (32-bit Quad-Core Cortex-A7) contradicts the reported specs (cores, RAM, or Android version)."
                 } else {
                     "Legacy AutoChips/MediaTek AC8227L Quad-Core platform identified. Verify seller claims do not advertise 8-core or Android 11+."
                 }
-                issues.add(AuditIssue(severity = severity, title = "AC8227L Chipset Signature", description = desc))
+                issues.add(AuditIssue(severity = severity, title = "AC8227L Chipset Signature", description = desc, code = code))
             }
             REGEX_ALLWINNER_T3.containsMatchIn(hwStr) -> {
                 val severity = if (contradictsQuadCoreLegacy) IssueSeverity.FAKE else IssueSeverity.INFO
+                val code = if (contradictsQuadCoreLegacy) IssueCode.CHIPSET_ALLWINNER_T3_FAKE else IssueCode.CHIPSET_ALLWINNER_T3_INFO
                 val desc = if (contradictsQuadCoreLegacy) {
                     "Allwinner sun8i/T3 (32-bit Quad-Core Cortex-A7) contradicts the reported specs (cores, RAM, or Android version)."
                 } else {
                     "Legacy Allwinner sun8i/T3 Quad-Core platform identified. Verify seller claims do not advertise 8-core or Android 11+."
                 }
-                issues.add(AuditIssue(severity = severity, title = "Allwinner T3 / sun8i Signature", description = desc))
+                issues.add(AuditIssue(severity = severity, title = "Allwinner T3 / sun8i Signature", description = desc, code = code))
             }
             REGEX_MT6580.containsMatchIn(hwStr) -> {
                 val severity = if (contradictsQuadCoreLegacy) IssueSeverity.FAKE else IssueSeverity.INFO
+                val code = if (contradictsQuadCoreLegacy) IssueCode.CHIPSET_MT6580_FAKE else IssueCode.CHIPSET_MT6580_INFO
                 val desc = if (contradictsQuadCoreLegacy) {
                     "MediaTek MT6580 (2015 32-bit Quad-Core CPU) contradicts the reported specs (cores, RAM, or Android version)."
                 } else {
                     "Legacy MediaTek MT6580 Quad-Core platform identified. Verify seller claims do not advertise modern 8-core hardware."
                 }
-                issues.add(AuditIssue(severity = severity, title = "MT6580 Legacy Chipset Signature", description = desc))
+                issues.add(AuditIssue(severity = severity, title = "MT6580 Legacy Chipset Signature", description = desc, code = code))
             }
             REGEX_ROCKCHIP_LEGACY.containsMatchIn(hwStr) -> {
                 val severity = if (contradictsQuadCoreLegacy) IssueSeverity.FAKE else IssueSeverity.INFO
+                val code = if (contradictsQuadCoreLegacy) IssueCode.CHIPSET_ROCKCHIP_FAKE else IssueCode.CHIPSET_ROCKCHIP_INFO
                 val desc = if (contradictsQuadCoreLegacy) {
                     "Entry-level Rockchip RK3128/RK3228/RK3229 Quad-Core chipset contradicts the reported specs."
                 } else {
                     "Entry-level Rockchip Quad-Core platform identified. Frequently resold with inflated specifications."
                 }
-                issues.add(AuditIssue(severity = severity, title = "Rockchip Legacy Signature", description = desc))
+                issues.add(AuditIssue(severity = severity, title = "Rockchip Legacy Signature", description = desc, code = code))
             }
         }
     }
@@ -635,7 +688,9 @@ object HardwareDetector {
                 AuditIssue(
                     severity = IssueSeverity.FAKE,
                     title = "Android Version Spoofed",
-                    description = "Reported Android ${system.reportedRelease} contradicts the actual kernel API level $sdk (Android $expectedMajor)."
+                    description = "Reported Android ${system.reportedRelease} contradicts the actual kernel API level $sdk (Android $expectedMajor).",
+                    code = IssueCode.ANDROID_VERSION_SPOOFED,
+                    formatArgs = listOf(system.reportedRelease, sdk.toString(), expectedMajor.toString())
                 )
             )
         } else if (sdk in 1..20 && major >= 5) {
@@ -643,7 +698,9 @@ object HardwareDetector {
                 AuditIssue(
                     severity = IssueSeverity.FAKE,
                     title = "Android Version Spoofed",
-                    description = "Reported Android ${system.reportedRelease} contradicts the actual legacy kernel API level $sdk."
+                    description = "Reported Android ${system.reportedRelease} contradicts the actual legacy kernel API level $sdk.",
+                    code = IssueCode.ANDROID_VERSION_SPOOFED,
+                    formatArgs = listOf(system.reportedRelease, sdk.toString(), "<5")
                 )
             )
         }

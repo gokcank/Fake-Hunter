@@ -2,32 +2,38 @@
 <resources>
     <string name="app_name">Fake Hunter</string>
     <string name="app_subtitle">Hardware Authenticity Toolkit</string>
-    <string name="btn_inspect">Inspect Hardware</string>
     <string name="btn_reinspect">Re-inspect</string>
     <string name="btn_copy_report">Copy Report</string>
     <string name="copied_to_clipboard">Report copied to clipboard</string>
-    
+
     <!-- Status -->
     <string name="status_clean">VERIFIED</string>
     <string name="status_suspicious">SUSPICIOUS</string>
     <string name="status_fake">FAKE HARDWARE DETECTED</string>
-    
+    <string name="issues_count_label">Issues: %1$d</string>
+    <string name="findings_header">Findings</string>
+
     <!-- Card Headers -->
     <string name="header_system">System Identity</string>
     <string name="header_memory">Memory (RAM &amp; Swap)</string>
     <string name="header_cpu">Processor (CPU Cores)</string>
     <string name="header_storage">Storage (User ROM)</string>
-    
+
     <!-- Metrics -->
-    <string name="metric_model">Model: %1$s</string>
-    <string name="metric_platform">Chipset / Board: %1$s</string>
-    <string name="metric_android">Android %1$s (API %2$d)</string>
+    <string name="metric_model">Model: %1$s (%2$s)</string>
+    <string name="metric_board">Board: %1$s</string>
+    <string name="metric_platform">Platform: %1$s</string>
+    <string name="metric_android">Android: %1$s (API %2$d)</string>
     <string name="metric_ram_physical">Physical RAM: %1$s</string>
     <string name="metric_ram_swap">Swap / ZRAM: %1$s</string>
-    <string name="metric_cores">Cores: %1$d reported / %2$d active</string>
-    <string name="metric_storage">Total /data: %1$s (Free: %2$s)</string>
-    
-    <!-- Warnings -->
+    <string name="metric_cores">Reported: %1$d | Active: %2$d</string>
+    <string name="metric_cpu_max_freq">Max clock: %1$d MHz</string>
+    <string name="metric_storage_total">Total /data: %1$s</string>
+    <string name="metric_storage_free">Free Space: %1$s</string>
+    <string name="metric_chip_detail">Chips: %1$s</string>
+    <string name="metric_selinux">SELinux: %1$s</string>
+
+    <!-- Warnings & Status Labels -->
     <string name="warn_swap_inflated">High swap / virtual RAM allocation detected!</string>
     <string name="warn_ram_spoofed">Reported RAM contradicts physical kernel memory!</string>
     <string name="ram_virtual_active">Virtual RAM / ZRAM active (rely on physical RAM)</string>
@@ -35,8 +41,6 @@
     <string name="warn_cores_fake">Reported cores are dormant/fake!</string>
     <string name="cpu_cores_verified">All reported cores verified</string>
     <string name="cpu_freq_unreadable">Core frequencies unreadable (system restriction)</string>
-    <string name="warn_android_spoofed">Android version is spoofed!</string>
-    <string name="warn_known_fake">Known fake chipset signature identified!</string>
 
     <!-- Root & Security -->
     <string name="header_root">Root &amp; Kernel Security</string>
@@ -53,7 +57,6 @@
     <string name="storage_test_skipped">Test skipped: %1$s</string>
     <string name="storage_test_error">Test interrupted (I/O error): %1$s</string>
     <string name="storage_test_cache_note">Note: Test size is smaller than RAM; read speed may reflect OS cache.</string>
-    <string name="storage_test_running">Test running…</string>
     <string name="storage_test_tested">Tested size: %1$d MB</string>
     <string name="metric_flash_physical">Physical flash chip: %1$s</string>
     <string name="metric_flash_unreadable">Physical flash chip: not readable</string>
@@ -72,8 +75,11 @@
 
     <!-- Settings, Save & QR -->
     <string name="btn_save_report">Save Evidence (ZIP)</string>
+    <string name="btn_saving_report">Saving…</string>
     <string name="btn_qr_code">QR Code</string>
     <string name="btn_settings">Settings</string>
+    <string name="btn_save">Save</string>
+    <string name="btn_cancel">Cancel</string>
     <string name="settings_title">Settings</string>
     <string name="settings_language">Language</string>
     <string name="settings_lang_system">System Default</string>
@@ -87,7 +93,12 @@
     <string name="settings_storage_test_desc">Block size for physical flash integrity test</string>
     <string name="qr_dialog_title">Audit Summary QR</string>
     <string name="qr_dialog_desc">Scan with any phone camera to transfer this report</string>
+    <string name="qr_generating">Generating QR code…</string>
+    <string name="qr_error_failed">Failed to generate QR code</string>
+    <string name="cd_qr_code">Audit summary QR code</string>
+    <string name="cd_audit_progress">Audit progress</string>
     <string name="report_saved_success">Evidence ZIP saved successfully</string>
+    <string name="report_saved_fallback">No system file picker found; saved directly to: %1$s</string>
     <string name="report_save_failed">Failed to save evidence ZIP</string>
     <string name="report_privacy_notice">Note: Evidence ZIP includes system logs that may contain device serial numbers—review before sharing publicly.</string>
 
@@ -98,8 +109,42 @@
     <string name="about_version">Version %1$s</string>
     <string name="about_description">Fake Hunter is an open-source toolkit designed to verify genuine hardware specifications and expose fraudulent firmware hacks on Android Head Units, TV boxes, and mobile devices.</string>
     <string name="about_privacy_title">Privacy &amp; Security</string>
-    <string name="about_privacy_desc">• Zero internet permissions (100% offline)\n• No telemetry, logging, or data tracking\n• Crash-proof defensive architecture</string>
+    <string name="about_privacy_desc" formatted="false">• Zero internet permissions (100% offline)\n• No telemetry, logging, or data tracking\n• Crash-proof defensive architecture</string>
     <string name="about_license_text">Open-source software licensed under MIT.</string>
     <string name="about_github_url">https://github.com/gokcank/Fake-Hunter</string>
     <string name="btn_close">Close</string>
+
+    <!-- Localized Finding Titles & Descriptions -->
+    <string name="issue_title_storage_failed">Storage Verification Failed</string>
+    <string name="issue_desc_storage_failed">%1$s</string>
+    <string name="issue_title_storage_incomplete">Storage Test Could Not Complete</string>
+    <string name="issue_desc_storage_incomplete">%1$s</string>
+    <string name="issue_title_ram_spoofed">RAM Size Spoofed</string>
+    <string name="issue_desc_ram_spoofed">Android reports %1$s MB total RAM, but Linux kernel physical RAM is only %2$s MB.</string>
+    <string name="issue_title_virtual_ram">Virtual RAM / ZRAM Expansion Active</string>
+    <string name="issue_desc_virtual_ram" formatted="false">Large compressed ZRAM swap (%1$s MB, %2$s%% of %3$s MB physical RAM) is common on Android 11+ devices. Verify seller claims against physical RAM.</string>
+    <string name="issue_title_high_swap">High Swap Allocation</string>
+    <string name="issue_desc_high_swap" formatted="false">Swap memory (%1$s MB) is %2$s%% of physical RAM (%3$s MB). Budget head units often combine swap with physical RAM to advertise inflated RAM.</string>
+    <string name="issue_title_disk_swap">Elevated Disk Swap Allocation</string>
+    <string name="issue_desc_disk_swap" formatted="false">Disk-backed swap space is %1$s%% of physical RAM (%2$s MB vs %3$s MB).</string>
+    <string name="issue_title_cpu_restricted">CPU Frequencies Restricted</string>
+    <string name="issue_desc_cpu_restricted">System security restrictions prevented reading core clock frequencies; reported %1$s cores could not be verified by active frequency.</string>
+    <string name="issue_title_fake_cores">Fake CPU Cores Detected</string>
+    <string name="issue_desc_fake_cores">System reports %1$s CPU cores, but only %2$s generate active clock frequency.</string>
+    <string name="issue_title_storage_spoofed">Storage Size Spoofed</string>
+    <string name="issue_desc_storage_spoofed">The /data partition reports %1$s MB, but the internal physical flash chip(s) only hold %2$s MB.</string>
+    <string name="issue_title_ac8227l">AC8227L Chipset Signature</string>
+    <string name="issue_desc_ac8227l_fake">AutoChips/MediaTek AC8227L (32-bit Quad-Core Cortex-A7) contradicts the reported specs (cores, RAM, or Android version).</string>
+    <string name="issue_desc_ac8227l_info">Legacy AutoChips/MediaTek AC8227L Quad-Core platform identified. Verify seller claims do not advertise 8-core or Android 11+.</string>
+    <string name="issue_title_allwinner_t3">Allwinner T3 / sun8i Signature</string>
+    <string name="issue_desc_allwinner_t3_fake">Allwinner sun8i/T3 (32-bit Quad-Core Cortex-A7) contradicts the reported specs (cores, RAM, or Android version).</string>
+    <string name="issue_desc_allwinner_t3_info">Legacy Allwinner sun8i/T3 Quad-Core platform identified. Verify seller claims do not advertise 8-core or Android 11+.</string>
+    <string name="issue_title_mt6580">MT6580 Legacy Chipset Signature</string>
+    <string name="issue_desc_mt6580_fake">MediaTek MT6580 (2015 32-bit Quad-Core CPU) contradicts the reported specs (cores, RAM, or Android version).</string>
+    <string name="issue_desc_mt6580_info">Legacy MediaTek MT6580 Quad-Core platform identified. Verify seller claims do not advertise modern 8-core hardware.</string>
+    <string name="issue_title_rockchip">Rockchip Legacy Signature</string>
+    <string name="issue_desc_rockchip_fake">Entry-level Rockchip RK3128/RK3228/RK3229 Quad-Core chipset contradicts the reported specs.</string>
+    <string name="issue_desc_rockchip_info">Entry-level Rockchip Quad-Core platform identified. Frequently resold with inflated specifications.</string>
+    <string name="issue_title_android_spoofed">Android Version Spoofed</string>
+    <string name="issue_desc_android_spoofed">Reported Android %1$s contradicts the actual kernel API level %2$s (Android %3$s).</string>
 </resources>

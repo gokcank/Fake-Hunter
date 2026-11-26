@@ -32,7 +32,7 @@
 ## 🎯 3 Maddede Fake Hunter Nedir? / What is Fake Hunter?
 
 * 🚗 **Oto Teyp & Multimedya Alışverişinde Hile Kalkanı:** Piyasada "8 Çekirdek, 8 GB RAM, 128 GB Hafıza, Android 14" etiketiyle satılan ancak gerçekte 4 çekirdekli eski bir yongaya (AC8227L, Allwinner T3 vb.) ve Android 8.1 ROM'una sahip cihazları saniyeler içinde ifşa eder.
-* 💾 **Sahte Depolama (NAND Flash) ve RAM Şişirmesi Tespiti:** ROM dosyalarını yanıltan sahte bilgileri es geçer; çekirdek dökümlerini (`/proc/meminfo`), raw sektör boyutunu (`/sys/block/*/size`) inceler ve 100 MB rastgele veri yazıp doğrulayarak sahte hafızayı bozulma (corruption) ile yakalar.
+* 💾 **Sahte Depolama (NAND Flash) ve RAM Şişirmesi Tespiti:** ROM dosyalarını yanıltan sahte bilgileri es geçer; çekirdek dökümlerini (`/proc/meminfo`), dahili raw sektör boyutunu (`/sys/block/*/size`, takılı USB/SD birimlerini ayırarak) inceler ve benzersiz blokları doğrudan fiziksel belleğe (`fsync`) yazıp doğrulayarak sahte hafızayı bozulma (corruption) ile yakalar.
 * 🛡️ **%100 Çevrimdışı & Adli Kanıt Kaydı:** Sıfır internet izni ister. Elde ettiği donanım kanıtlarını USB belleğe adli `.zip` arşivi olarak kaydeder veya tek dokunuşla ekranda QR koda dökerek telefonunuzun kamerasıyla yanınıza almanızı sağlar.
 
 ---
@@ -63,9 +63,9 @@ Mağazada veya araçta teybe Fake Hunter taktığınızda çıkan ekrana göre 5
 ### Fake Hunter Nasıl Çalışır?
 * **Çekirdek Düzeyinde Bellek Okuma:** Android API'lerinin yanıltıcı çağrılarını atlar; doğrudan Linux çekirdeğinin `/proc/meminfo` dökümünden gerçek fiziksel RAM (`MemTotal`) ile takas alanını (`SwapTotal`) ayrıştırır.
 * **Canlı Çekirdek Uyandırma Testi:** Çekirdeklere anlık hesaplama yükü bindirir ve `/sys/devices/system/cpu/cpu*/cpufreq/` düğümlerinden gerçek frekans üretip üretmediklerini doğrular.
-* **Fiziksel Flash Sektör Taraması:** `/sys/block/*/size` üzerinden blok aygıtlarının raw sektör sayısını (512 bayt) okuyarak depolama silikonunun gerçek donanım sınırını belirler.
-* **Fiziksel Yazma ve Bütünlük Doğrulaması:** Disk üzerine 100 MB'lık rastgele veri blokları yazar, ardından geri okuyarak sağlama toplamını doğrular. Sahte flash çipler bu aşamada doğrudan bozulma hatası verir.
-* **Adli Teftiş ZIP Paketi (SAF):** Tek tıkla 11 teşhis dosyasını (`getprop`, `cpuinfo`, `meminfo`, `partitions`, `mounts`, `logcat`, `dmesg`, vb.) bir araya getirerek USB belleğe `.zip` olarak dışa aktarır.
+* **Fiziksel Flash Sektör Taraması:** `/sys/block/*/size` üzerinden dahili blok aygıtlarının raw sektör sayısını (512 bayt) okuyarak (harici USB bellek ve SD kartları ayrı tutarak) depolama silikonunun gerçek donanım sınırını belirler.
+* **Fiziksel Yazma ve Bütünlük Doğrulaması:** Disk üzerine tekrar etmeyen benzersiz veri blokları (varsayılan 100 MB; 250/500 MB seçilebilir) yazar, önbelleği diske zorlar (`fsync`) ve geri okuyarak sağlama toplamını doğrular. Sahte flash çipler bu aşamada doğrudan bozulma hatası verir.
+* **Adli Teftiş ZIP Paketi (SAF + Yedek Kayıt):** Tek tıkla 11 teşhis dosyasını (`getprop`, `cpuinfo`, `meminfo`, `partitions`, `mounts`, `logcat`, `dmesg`, vb.) bir araya getirerek USB belleğe `.zip` olarak dışa aktarır (sistem dosya seçicisi kaldırılmış teyplerde doğrudan uygulama klasörüne yedekler).
 * **Çevrimdışı QR Kod Özeti:** USB veya kablo bulunmayan durumlarda rapor özetini ekranda QR koda dökerek telefon kamerasıyla alınmasını sağlar.
 
 ---
@@ -82,9 +82,9 @@ Budget Android head units, car multimedia replacements, and TV streaming boxes f
 ### How Fake Hunter Detects Counterfeits
 * **Direct Kernel Memory Parsing:** Bypasses framework-level queries to parse `/proc/meminfo` directly, isolating physical RAM (`MemTotal`) from Swap (`SwapTotal`).
 * **Active CPU Core Benchmarking:** Applies a micro-workload across all reported cores and inspects `/sys/devices/system/cpu/` nodes to confirm genuine active clock frequencies.
-* **Hardware Sector Capacity Detection:** Inspects `/sys/block/*/size` sector counts (512-byte sectors) to determine true physical eMMC/UFS silicon capacity before partition inflation.
-* **Physical Flash Integrity Testing:** Performs sustained write/read cycles with randomized blocks, verifies integrity via checksums, and exposes fake NAND memory through readback corruption.
-* **Forensic ZIP Evidence Export (SAF):** One-click packaging of 11 low-level diagnostic dumps into a standardized forensic archive.
+* **Hardware Sector Capacity Detection:** Inspects `/sys/block/*/size` sector counts (512-byte sectors), separating removable USB/SD drives from internal flash to determine true physical eMMC/UFS silicon capacity before partition inflation.
+* **Physical Flash Integrity Testing:** Performs `fsync`-flushed write/read cycles with non-repeating unique SplitMix64 blocks (100 / 250 / 500 MB), verifies integrity via checksums, and exposes fake wrap-around NAND memory through readback corruption.
+* **Forensic ZIP Evidence Export (SAF + Fallback):** One-click packaging of 11 low-level diagnostic dumps into a standardized forensic archive (with automatic app-directory fallback on stripped head units lacking a system file picker).
 * **On-Screen Offline QR Code:** Generates offline ZXing QR codes of the inspection verdict for instant smartphone camera scanning.
 
 ---
@@ -171,9 +171,9 @@ sh fake_hunter.sh --lang en --wake --root --storage-test 100 --output report.txt
 
 ## 🛡️ Gizlilik ve Güvenlik / Privacy & Security
 
-* **Sıfır İnternet İzni Politikası:** `AndroidManifest.xml` içinde `android.permission.INTERNET` izni bulunmaz. Uygulama hiçbir sunucuyla iletişim kurmaz, telemetri veya analitik toplamaz.
-* **Defansif Çekirdek İletişimi:** Tüm donanım okumaları `safeRun` korumalı bloklarıyla sarılmıştır. Kırpılmış, eksik veya alışılmadık otomotiv ROM'larında çökme yapmaz.
-* **Açık Kaynak & Şeffaf:** Kodların tamamı açık kaynaktır; teftiş edilen kanıtlar kullanıcı kontrolünde sadece yerel cihaza veya USB'ye kaydedilir.
+* **Sıfır İnternet İzni Politikası:** `AndroidManifest.xml` içinde `android.permission.INTERNET` veya depolama izni bulunmaz (her derlemede CI tarafından otomatik denetlenir). Uygulama hiçbir sunucuyla iletişim kurmaz, telemetri veya analitik toplamaz.
+* **Defansif Çekirdek İletişimi:** Donanım ve kabuk okumaları `safeRun` ve bellek/süre sınırlı süreç yöneticileriyle korunur; kırpılmış veya kısıtlı otomotiv ROM'larında beklenmedik G/Ç hatalarına karşı dayanıklıdır.
+* **Açık Kaynak & Şeffaf:** Kodların tamamı açık kaynaktır; teftiş edilen kanıtlar kullanıcı kontrolünde sadece yerel cihaza veya USB'ye kaydedilir. Ayrıntılar için: **[SECURITY.md](SECURITY.md)**.
 
 ---
 

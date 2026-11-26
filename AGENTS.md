@@ -21,13 +21,14 @@ Hardware authenticity and fraud detection toolkit for Android Head Units (car mu
 - Defensive programming: Wrap hardware reads in `safeRun` to prevent crashes on stripped-down automotive ROMs.
 - Dual flavor parity: New detection metrics must be visible in both Modern and Classic variants.
 
-## Status (as of 2026-11-25)
+## Status (as of 2026-11-26)
 - Project status: **active** (set 2026-11-24; source of truth: the brain page).
-- Version: 1.1.0. All-in-one automated audit chain, forensic ZIP evidence export via SAF, on-screen QR code summary, settings dialog with multi-language support (TR/EN/System), raw flash chip sizing (/sys/block/*/size), dual flavor parity (Modern Compose + Classic XML), and emulator verified.
+- Version: 1.1.0. Automated audit chain with lifecycle-safe single-flight coordinator, forensic ZIP evidence export via SAF (plus app-dir fallback), ASCII QR summary, full TR/EN/System localization with instant system-locale restoration, internal vs removable `/sys/block/*/size` flash sizing, hardened POSIX/ADB scripts, JUnit4 unit test suite, and CI zero-internet manifest gate.
 
 ## Open items
-- [ ] Expand automated unit/instrumentation tests.
-- [ ] Add more known counterfeit chipset signatures to the offline database.
+- [ ] Add connected Android instrumentation UI tests.
+- [ ] Expand known counterfeit chipset signatures in the offline database.
+- [ ] Configure production release keystore and R8 minification when preparing the next official release.
 
 ## More context
 Background, decisions and history are in the second brain: `/home/gokcank/ikinci-beyin/projects/fake-hunter.md` (read on demand).

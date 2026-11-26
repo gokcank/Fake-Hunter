@@ -34,8 +34,8 @@ Gerçek bir oto multimedya mağazasında yapılan ilk saha testinin ardından, s
 * **Donanımsal eMMC/UFS Sektör Boyutu Taraması:**
   * `/sys/block/*/size` çekirdek sektör dökümü (512 bayt sektör) taranarak silikon çipin gerçek fiziksel boyutu okunur.
   * Yazılımla partition tablosu şişirilmiş depolamalar (örn. 16 GB çipe sahipken 64/128 GB gösterilen cihazlar) doğrudan donanım seviyesinde ifşa edilir.
-* **İki Sıralı Responsive Buton Tasarımı:**
-  * Modern (Compose) ve Klasik (XML) varyantlarında butonlar iki satırlı esnek düzene kavuşturuldu; hem yatay multimedya ekranlarında hem dikey telefon/tabletlerde taşma ve kaydırma ihtiyacı olmadan tüm fonksiyonlar erişilebilir hale getirildi.
+* **İki Sıralı Responsive Buton Tasarımı ve Tam Ekran Uyumu:**
+  * Modern (Compose) ve Klasik (XML) varyantlarında butonlar iki satırlı esnek düzene ve kaydırılabilir açılır pencerelere kavuşturuldu; hem kompakt yatay multimedya ekranlarında hem dikey telefon/tabletlerde tüm fonksiyonlar erişilebilir hale getirildi.
 * **Bağımsız Terminal Betiği Güncellemesi (`fake_hunter.sh` v1.1.0):**
   * Donanımsal flash sektör taraması eklendi, dil ve raporlama yetenekleri güncellendi.
 
@@ -88,8 +88,8 @@ Following the first real-world field verification at an automotive multimedia st
 * **Raw Flash Silicon Sizing (`/sys/block/*/size`):**
   * Reads kernel sector counts (512-byte sectors) to determine true physical eMMC/UFS silicon capacity.
   * Exposes ROMs where partition boundaries (`/data`) are artificially inflated beyond physical chip sizes.
-* **Responsive 2-Row Action Bar:**
-  * Re-architected top buttons in both Modern (Compose) and Classic (XML Views) flavors into a clean, 2-row layout. Guarantees zero clipping across all screen sizes and orientations.
+* **Responsive 2-Row Action Bar & Scrollable Dialogs:**
+  * Re-architected top buttons in both Modern (Compose) and Classic (XML Views) flavors into a clean 2-row layout with scrollable dialogs and edge-to-edge inset handling across compact head units, tablets, and phones.
 * **Standalone Shell Script (`fake_hunter.sh` v1.1.0):**
   * Updated with hardware sector sizing, enhanced localization, and robust execution.
 

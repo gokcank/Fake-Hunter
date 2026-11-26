@@ -86,9 +86,13 @@ dependencies {
     "modernImplementation"(libs.androidx.material3)
     modernDebugImplementation(libs.androidx.ui.tooling)
 
-    // Satisfy Kotlin Compose compiler plugin classpath check on Classic without packaging any Compose code
+    // Satisfy Kotlin Compose compiler plugin classpath check on Classic & test source sets without packaging Compose into Classic APKs
     "classicCompileOnly"(platform(libs.androidx.compose.bom))
     "classicCompileOnly"(libs.androidx.compose.runtime)
+    testCompileOnly(platform(libs.androidx.compose.bom))
+    testCompileOnly(libs.androidx.compose.runtime)
+    androidTestCompileOnly(platform(libs.androidx.compose.bom))
+    androidTestCompileOnly(libs.androidx.compose.runtime)
 
     testImplementation(libs.junit)
 }

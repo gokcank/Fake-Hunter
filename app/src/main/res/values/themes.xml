@@ -13,7 +13,7 @@
 
     <style name="Theme.FakeHunter.Dialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
         <item name="colorSurface">@color/card_dark</item>
-        <item name="android:background">@color/card_dark</item>
+        <item name="android:windowBackground">@color/card_dark</item>
         <item name="android:textColorPrimary">@color/white</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
         <item name="colorPrimary">@color/primary_accent</item>

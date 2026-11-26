@@ -89,6 +89,7 @@
     <string name="qr_dialog_desc">Raporu telefonuna aktarmak için kamerayla tara</string>
     <string name="report_saved_success">Adli teftiş arşivi başarıyla kaydedildi</string>
     <string name="report_save_failed">Arşiv kaydedilemedi</string>
+    <string name="report_privacy_notice">Not: Adli ZIP içindeki sistem günlükleri cihaz seri numarası içerebilir; paylaşmadan önce kontrol edin.</string>
 
     <!-- Hakkında Penceresi -->
     <string name="btn_about">Hakkında</string>

@@ -83,14 +83,18 @@ class MainActivity : ComponentActivity() {
                 val saveLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.CreateDocument("application/zip")
                 ) { uri ->
-                    if (uri != null && report != null) {
+                    val targetReport = report
+                    if (uri != null && targetReport != null) {
                         Thread {
                             val success = try {
                                 contentResolver.openOutputStream(uri)?.use { os ->
-                                    EvidenceCollector.exportEvidenceZip(this@MainActivity, report!!, os)
+                                    EvidenceCollector.exportEvidenceZip(targetReport, os)
                                 } ?: false
                             } catch (e: Exception) {
                                 false
+                            }
+                            if (!success) {
+                                EvidenceCollector.deletePartialSafDocument(this@MainActivity, uri)
                             }
                             runOnUiThread {
                                 val msg = if (success) {
@@ -106,6 +110,7 @@ class MainActivity : ComponentActivity() {
 
                 fun triggerSaveZip() {
                     val current = report ?: return
+                    Toast.makeText(this@MainActivity, getString(R.string.report_privacy_notice), Toast.LENGTH_LONG).show()
                     val fileName = EvidenceCollector.generateZipFileName(current)
                     saveLauncher.launch(fileName)
                 }

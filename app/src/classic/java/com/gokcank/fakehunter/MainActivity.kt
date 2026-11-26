@@ -43,10 +43,13 @@ class MainActivity : AppCompatActivity() {
             Thread {
                 val success = try {
                     contentResolver.openOutputStream(uri)?.use { os ->
-                        EvidenceCollector.exportEvidenceZip(this, report, os)
+                        EvidenceCollector.exportEvidenceZip(report, os)
                     } ?: false
                 } catch (e: Exception) {
                     false
+                }
+                if (!success) {
+                    EvidenceCollector.deletePartialSafDocument(this, uri)
                 }
                 runOnUiThread {
                     val msg = if (success) {
@@ -131,6 +134,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun triggerSaveZip() {
         val report = currentReport ?: return
+        Toast.makeText(this, getString(R.string.report_privacy_notice), Toast.LENGTH_LONG).show()
         val fileName = EvidenceCollector.generateZipFileName(report)
         saveLauncher.launch(fileName)
     }

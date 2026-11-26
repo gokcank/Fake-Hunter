@@ -89,6 +89,7 @@
     <string name="qr_dialog_desc">Scan with any phone camera to transfer this report</string>
     <string name="report_saved_success">Evidence ZIP saved successfully</string>
     <string name="report_save_failed">Failed to save evidence ZIP</string>
+    <string name="report_privacy_notice">Note: Evidence ZIP includes system logs that may contain device serial numbers—review before sharing publicly.</string>
 
     <!-- About Dialog -->
     <string name="btn_about">About</string>

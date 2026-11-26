@@ -7,6 +7,7 @@ import android.os.Environment
 import android.os.StatFs
 import com.gokcank.fakehunter.core.model.*
 import com.gokcank.fakehunter.core.root.RootHelper
+import com.gokcank.fakehunter.core.root.ShellRunner
 import com.gokcank.fakehunter.core.safeRun
 import com.gokcank.fakehunter.core.storage.StorageTester
 import java.io.File
@@ -442,15 +443,18 @@ object HardwareDetector {
         val externalChips = mutableListOf<FlashChip>()
         var complete = true
 
-        val names = safeRun("FlashList", emptyList<String>()) {
+        val directList = safeRun("FlashList", emptyList<String>()) {
             File("/sys/block").list()?.toList() ?: emptyList()
-        }.ifEmpty {
-            if (useRoot) {
-                RootHelper.executeRootCommand("ls /sys/block")
-                    ?.lineSequence()?.map { it.trim() }?.filter { it.isNotEmpty() }?.toList()
-                    ?: emptyList()
-            } else emptyList()
         }
+
+        // If root is granted and direct sysfs access is restricted, collect all block metadata in ONE root call
+        val rootSnapshot: Map<String, Triple<Long, String?, String?>> = if (useRoot) {
+            readAllBlockMetadataViaRoot()
+        } else {
+            emptyMap()
+        }
+
+        val names = if (directList.isNotEmpty()) directList else rootSnapshot.keys.toList()
 
         val candidates = names.filter { name ->
             NON_FLASH_PREFIXES.none { name.startsWith(it) } &&
@@ -460,9 +464,10 @@ object HardwareDetector {
         if (candidates.isEmpty()) return Triple(emptyList(), emptyList(), false)
 
         for (name in candidates) {
-            val removableFlag = readSysfsFile("/sys/block/$name/removable", useRoot)
+            val rootEntry = rootSnapshot[name]
+            val removableFlag = readSysfsDirect("/sys/block/$name/removable") ?: rootEntry?.second
             val mmcType = if (name.startsWith("mmcblk")) {
-                readSysfsFile("/sys/block/$name/device/type", useRoot)
+                readSysfsDirect("/sys/block/$name/device/type") ?: rootEntry?.third
             } else null
             val canonicalPath = safeRun("FlashPath", null) {
                 File("/sys/block/$name").canonicalPath
@@ -473,10 +478,9 @@ object HardwareDetector {
             var sectors = safeRun("FlashSize", 0L) {
                 File("/sys/block/$name/size").readText().trim().toLongOrNull() ?: 0L
             }
-            if (sectors == 0L && useRoot) {
-                sectors = RootHelper.executeRootCommand("cat /sys/block/$name/size")
-                    ?.trim()?.toLongOrNull() ?: 0L
-                viaRoot = sectors > 0L
+            if (sectors == 0L && rootEntry != null && rootEntry.first > 0L) {
+                sectors = rootEntry.first
+                viaRoot = true
             }
 
             if (removable) {
@@ -510,16 +514,36 @@ object HardwareDetector {
         return Triple(internalChips, externalChips, complete && internalChips.isNotEmpty())
     }
 
-    private fun readSysfsFile(path: String, useRoot: Boolean): String? {
-        val direct = safeRun("ReadSysfs", null) {
+    private fun readSysfsDirect(path: String): String? {
+        return safeRun("ReadSysfs", null) {
             val f = File(path)
             if (f.exists() && f.canRead()) f.readText().trim() else null
         }
-        if (direct != null) return direct
-        if (useRoot) {
-            return RootHelper.executeRootCommand("cat $path")?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun readAllBlockMetadataViaRoot(): Map<String, Triple<Long, String?, String?>> {
+        val script = """
+            for d in /sys/block/*; do
+              [ -e "${'$'}d" ] || continue
+              n="${'$'}{d##*/}"
+              s=${'$'}(cat "${'$'}d/size" 2>/dev/null || echo 0)
+              r=${'$'}(cat "${'$'}d/removable" 2>/dev/null || echo "")
+              t=${'$'}(cat "${'$'}d/device/type" 2>/dev/null || echo "")
+              echo "${'$'}n|${'$'}s|${'$'}r|${'$'}t"
+            done
+        """.trimIndent()
+        val raw = RootHelper.executeRootCommand(script, timeoutMs = 6_000L, maxChars = 64 * 1024) ?: return emptyMap()
+        val map = mutableMapOf<String, Triple<Long, String?, String?>>()
+        raw.lineSequence().forEach { line ->
+            val parts = line.trim().split("|")
+            if (parts.size >= 4 && parts[0].isNotBlank()) {
+                val sectors = parts[1].trim().toLongOrNull() ?: 0L
+                val rem = parts[2].trim().takeIf { it.isNotEmpty() }
+                val typ = parts[3].trim().takeIf { it.isNotEmpty() }
+                map[parts[0].trim()] = Triple(sectors, rem, typ)
+            }
         }
-        return null
+        return map
     }
 
     internal fun evaluateKnownFraudSignatures(
@@ -626,10 +650,12 @@ object HardwareDetector {
     }
 
     private fun getSystemProperty(prop: String): String {
-        return safeRun("SysProp", "Unknown") {
-            val process = Runtime.getRuntime().exec(arrayOf("getprop", prop))
-            process.inputStream.bufferedReader().use { it.readLine()?.trim() ?: "Unknown" }
-        }
+        return ShellRunner.run(arrayOf("getprop", prop), timeoutMs = 2_000L, maxChars = 4096)
+            ?.lineSequence()
+            ?.firstOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "Unknown"
     }
 
     private fun parseKb(line: String): Long {
